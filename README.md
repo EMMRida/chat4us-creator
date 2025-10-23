@@ -7,7 +7,7 @@ Chat flows can be connected either to local/offline LLMs using GPT4All or extern
 Project Depencies:
 - Java (JRE) 21 or higher to be installed before launching apps.
 - GPT4All when needing to use local/offline LLMs for AI-driven chats.
-- Chat4Us-Agent if you plan providing human interaction when remote users asks for it.
+- Chat4Us-Agent if you plan providing human interaction when remote users asks for it. [repository](https://github.com/EMMRida/chat4us-agent)
 
 This project is developped using Eclipse IDE. Binaries were tested on Windows and Ubuntu (WSL). MacOS (not yet tested).
 
