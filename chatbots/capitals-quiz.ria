@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<route>
+	<info>
+		<entry_id>1</entry_id>
+		<locale>EN</locale>
+		<ai_model>
+			<name>ChatBot</name>
+			<guidelines>You are an AI assistant that is animating a countries/capitals quiz. Keep the quiz running and the user engaged. Use a natural and positive language. Respond in one paragraph.</guidelines>
+			<script></script>
+			<params>
+				<param>
+					<key>max_tokens</key>
+					<value>512</value>
+				</param>
+				<param>
+					<key>app_agent_req_prefix</key>
+					<value></value>
+				</param>
+				<param>
+					<key>temperature</key>
+					<value>0.5</value>
+				</param>
+				<param>
+					<key>model</key>
+					<value>Llama 3.2 3B Instruct</value>
+				</param>
+			</params>
+		</ai_model>
+	</info>
+	<questions>
+		<question>
+			<id>4</id>
+			<bounds>430;15;100;100</bounds>
+			<message>What is the capital of Spain?</message>
+			<response>
+				<condition>
+					<type>text:equal</type>
+					<validation>Madrid</validation>
+					<on_success>
+						<message>Good answer! let&#39;s move to the next one.</message>
+						<action>switch_to_ai</action>
+						<value></value>
+						<move>0</move>
+					</on_success>
+					<on_error>
+						<message>Wrong answer! Try again...</message>
+						<action>repeat</action>
+						<value></value>
+						<move>0</move>
+					</on_error>
+					<script>
+					</script>
+				</condition>
+			</response>
+		</question>
+		<question>
+			<id>3</id>
+			<bounds>294;14;100;100</bounds>
+			<message>What is the capital of the USA?</message>
+			<response>
+				<condition>
+					<type>text:equal</type>
+					<validation>Washington</validation>
+					<on_success>
+						<message>Good answer! let&#39;s move to the next one.</message>
+						<action>nop</action>
+						<value></value>
+						<move>4</move>
+					</on_success>
+					<on_error>
+						<message>Wrong answer! Try again...</message>
+						<action>repeat</action>
+						<value></value>
+						<move>0</move>
+					</on_error>
+					<script>
+					</script>
+				</condition>
+			</response>
+		</question>
+		<question>
+			<id>1</id>
+			<bounds>26;14;100;100</bounds>
+			<message>Welcome the country/capital quiz!
+Enter yes to start the quiz, other to end the chat.</message>
+			<response>
+				<condition>
+					<type>text:equal</type>
+					<validation>yes</validation>
+					<on_success>
+						<message>Great let&#39;s start the quiz now!</message>
+						<action>nop</action>
+						<value></value>
+						<move>2</move>
+					</on_success>
+					<on_error>
+						<message>The chat is now finished.</message>
+						<action>end</action>
+						<value></value>
+						<move>0</move>
+					</on_error>
+					<script>
+					</script>
+				</condition>
+			</response>
+		</question>
+		<question>
+			<id>2</id>
+			<bounds>160;14;100;100</bounds>
+			<message>What is the capital of Morocco?</message>
+			<response>
+				<condition>
+					<type>text:equal</type>
+					<validation>Rabat</validation>
+					<on_success>
+						<message>Good answer! let&#39;s move to the next one.</message>
+						<action>nop</action>
+						<value></value>
+						<move>3</move>
+					</on_success>
+					<on_error>
+						<message>Wrong answer! Try again...</message>
+						<action>repeat</action>
+						<value></value>
+						<move>0</move>
+					</on_error>
+					<script>
+					</script>
+				</condition>
+			</response>
+		</question>
+	</questions>
+</route>
