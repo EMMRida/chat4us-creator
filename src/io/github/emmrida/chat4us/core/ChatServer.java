@@ -766,7 +766,7 @@ public class ChatServer {
 	 * @param enabled New enabled state.
 	 */
 	public void setEnabled(boolean enabled) {
-		if(!started) {
+		if(!started && enabled) {
 			Helper.logError(Messages.getString("ChatServer.LOG_ERR_SERVER_NOT_STARTED"), false); //$NON-NLS-1$
 			enabled = false;
 		}

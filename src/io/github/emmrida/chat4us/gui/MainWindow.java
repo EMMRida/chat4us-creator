@@ -1311,6 +1311,17 @@ public class MainWindow {
 	private void menuServerDeActivate(ChatServer chatServer) {
 		int ret = Helper.showConfirmDialog(mainFrame, String.format(Messages.getString("MainWindow.MB_SERVER_DE_ACTIVATE_MSG"), (chatServer.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), chatServer.getName()), Messages.getString("MainWindow.MB_SERVER_DE_ACTIVATE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		if(ret == JOptionPane.YES_OPTION) {
+			if(!chatServer.isStarted() && !chatServer.isEnabled()) {
+				AppAuthDialog dlg = new AppAuthDialog(MainWindow.getFrame());
+				dlg.setLocationRelativeTo(MainWindow.getFrame());
+				dlg.setVisible(true);
+				if(dlg.isCancelled()) return;
+				char[] pswd = dlg.getPassword();
+				dlg.dispose();
+				if(Helper.checkKeystorePassword(pswd)) {
+					chatServer.startSecureServer(pswd);
+				} else return;
+			}
 			boolean b = !chatServer.isEnabled();
 			if(1 == Helper.dbUpdate(conChat4Us, "UPDATE chatbots SET enabled=" + (b ? 1 : 0) + " WHERE id=" + chatServer.getDbId() + ";")) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				chatServer.setEnabled(b);
