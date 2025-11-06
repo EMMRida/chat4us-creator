@@ -49,6 +49,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.StringCharacterIterator;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -1151,6 +1152,19 @@ public class Helper {
         // Format the Instant to the desired format
         return formatter.format(instant);
     }
+
+	/**
+	 * Get the local date time from the given date string using the given format
+	 * @param dateString The date string
+	 * @param format The format to use
+	 * @return The local date time
+	 */
+	public static LocalDateTime toLocalDateTime(String dateString, String format) {
+        Objects.requireNonNull(dateString);
+        Objects.requireNonNull(format);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format);
+        return LocalDateTime.parse(dateString, formatter);
+	}
 
 	/**
 	 * Get the size of the given bytes in a human readable format.

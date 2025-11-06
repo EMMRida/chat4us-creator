@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="create_run_jar" name="Create Runnable Jar for Project chat4us with libraries in sub-folder">
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <!--define folder properties-->
+    <property name="dir.buildfile" value="."/>
+    <property name="dir.workspace" value="${dir.buildfile}/.."/>
+    <property name="dir.jarfile" value="${dir.buildfile}/jar"/>
+    <target name="create_run_jar">
+        <jar destfile="${dir.jarfile}/chat4us-creator.jar">
+            <manifest>
+                <attribute name="Main-Class" value="io.github.emmrida.chat4us.gui.MainWindow"/>
+                <attribute name="Class-Path" value=". lib/xnio-api-3.8.17.Final.jar lib/xnio-nio-3.8.17.Final.jar lib/error_prone_annotations-2.41.0.jar lib/bcutil-jdk18on-1.81.jar lib/bcprov-jdk18on-1.82.jar lib/bcpkix-jdk18on-1.81.jar lib/undertow-examples-2.3.19.Final.jar lib/jboss-logging-3.6.1.Final.jar lib/jakarta.servlet-api-6.1.0.jar lib/undertow-servlet-2.3.19.Final.jar lib/undertow-core-2.3.19.Final.jar lib/gson-2.13.2.jar lib/javet-4.1.7.jar lib/autocomplete-3.3.2.jar lib/rsyntaxtextarea-3.6.0.jar lib/sqlite-jdbc-3.50.3.0.jar lib/javet-v8-linux-x86_64-4.1.7.jar lib/javet-v8-windows-x86_64-4.1.7.jar lib/jna-5.18.1.jar lib/jna-platform-5.18.1.jar lib/javet-v8-macos-x86_64-4.1.7.jar"/>
+            </manifest>
+            <fileset dir="${dir.buildfile}/bin"/>
+        </jar>
+        <delete dir="${dir.jarfile}/lib"/>
+        <mkdir dir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/xnio-api-3.8.17.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/xnio-nio-3.8.17.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/error_prone_annotations-2.41.0.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/bcutil-jdk18on-1.81.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/bcprov-jdk18on-1.82.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/bcpkix-jdk18on-1.81.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/undertow-examples-2.3.19.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/jboss-logging-3.6.1.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/jakarta.servlet-api-6.1.0.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/undertow-servlet-2.3.19.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/undertow-core-2.3.19.Final.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/gson-2.13.2.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/javet-4.1.7.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/autocomplete-3.3.2.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/rsyntaxtextarea-3.6.0.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/sqlite-jdbc-3.50.3.0.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/javet-v8-linux-x86_64-4.1.7.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/javet-v8-windows-x86_64-4.1.7.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/jna-5.18.1.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/jna-platform-5.18.1.jar" todir="${dir.jarfile}/lib"/>
+        <copy file="${dir.buildfile}/lib/javet-v8-macos-x86_64-4.1.7.jar" todir="${dir.jarfile}/lib"/>
+    </target>
+</project>

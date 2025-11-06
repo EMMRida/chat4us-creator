@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -243,21 +244,6 @@ public class ChatServer {
 			this.port = port;
 			this.groupId = groupId;
 			this.description = ""; //$NON-NLS-1$
-			ChatClient cc = this.getChatClient();
-			for(Object[] aiServer : aiServers) {
-				if(((int)aiServer[1] == dbId) && ((int)aiServer[4] == 0)) {
-					IChatModelClient cmc;
-					if(((String)aiServer[2]).contains("api.openai.com")) { //$NON-NLS-1$
-						cmc = new ChatGptModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else if(((String)aiServer[2]).contains("api.groq.com")) { //$NON-NLS-1$
-						cmc = new GroqModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else if(((String)aiServer[2]).contains("api.deepseek.com")) { //$NON-NLS-1$
-						cmc = new DeepSeekModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else cmc = new Chat4AllModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					cc.addChatModelClient(cmc);
-				}
-			}
-			this.chatClient = cc;
 		} catch(Exception ex) {
 			Helper.logError(ex, String.format(Messages.getString("ChatServer.SERVER_CREATION_ERROR"), host, port), true); //$NON-NLS-1$
 		}
@@ -741,24 +727,51 @@ public class ChatServer {
 			cs.enabled = rs.getInt("enabled") == 0 ? false : true; //$NON-NLS-1$
 			ChatClient cc = cs.getChatClient();
 			cc.loadChatBotRIA(rs.getString("ria_file")); //$NON-NLS-1$
-			for(Object[] aiServer : aiServers) {
-				if(((int)aiServer[1] == dbId) && ((int)aiServer[4]==0)) {
-					IChatModelClient cmc;
-					if(((String)aiServer[2]).contains("api.openai.com")) { //$NON-NLS-1$
-						cmc = new ChatGptModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else if(((String)aiServer[2]).contains("api.groq.com")) { //$NON-NLS-1$
-						cmc = new GroqModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else if(((String)aiServer[2]).contains("api.deepseek.com")) { //$NON-NLS-1$
-						cmc = new DeepSeekModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					} else cmc = new Chat4AllModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
-					cc.addChatModelClient(cmc);
-				}
-			}
+			cs.loadChatModelClients(aiServers);
 			return cs;
 		} catch(Exception ex) {
 			Helper.logError(ex, Messages.getString("ChatServer.SERVER_LOAD_ERROR"), true); //$NON-NLS-1$
 		}
 		return null;
+	}
+
+	/**
+	 * Load chat model clients based on AI model params.
+	 * @param aiServers List of all AI servers records
+	 * @param dbId Chat server database id
+	 * @param cc Chat client object to add chat model clients into.
+	 */
+	public void loadChatModelClients(List<Object[]> aiServers) {
+
+		ChatSession ses = chatClient.riaChatSession(chatClient.getMainLocale());
+		String modelPrefix = null;
+		for(Entry<String, String> entry : ses.getAiModelParamsEntrySet()) {
+			modelPrefix = entry.getKey().split("_")[0] + "_"; //$NON-NLS-1$ //$NON-NLS-2$
+			if("ollama_;gpt4all_;chatgpt_;groq_;deepseek_".contains(modelPrefix)) { //$NON-NLS-1$
+				break;
+			} else modelPrefix = null;
+		}
+		if(modelPrefix != null) {
+			for(Object[] aiServer : aiServers) {
+				if(((int)aiServer[1] == dbId) && ((int)aiServer[4]==0)) { // Enabled and related to this chat server
+					IChatModelClient cmc = null;
+					if(modelPrefix.equals(ChatGptModelClient.AIQ_PREFIX)) {
+						cmc = new ChatGptModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+					} else if(modelPrefix.equals(GroqModelClient.AIQ_PREFIX)) {
+						cmc = new GroqModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+					} else if(modelPrefix.equals(DeepSeekModelClient.AIQ_PREFIX)) {
+						cmc = new DeepSeekModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+					} else if(modelPrefix.equals(Chat4AllModelClient.AIQ_PREFIX)) {
+						cmc = new Chat4AllModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+					} else if(modelPrefix.equals(OllamaModelClient.AIQ_PREFIX)) {
+						cmc = new OllamaModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+					}
+					if(cmc != null) {
+						chatClient.addChatModelClient(cmc);
+					} else Helper.logWarning(Messages.getString("ChatServer.PREFIX_AI_MODEL_NOTFOUND") + modelPrefix, false); //$NON-NLS-1$
+				}
+			}
+		}
 	}
 
 	/**
@@ -817,8 +830,8 @@ public class ChatServer {
            V8ValueGlobalObject global = v8Runtime.getGlobalObject();
            global.set("ScriptEx", ScriptEx.class); //$NON-NLS-1$
            global.set("response", response); //$NON-NLS-1$
-           global.set("message", ""); //$NON-NLS-1$
-           ses.setVar("message", "");
+           global.set("message", ""); //$NON-NLS-1$ //$NON-NLS-2$
+           ses.setVar("message", ""); //$NON-NLS-1$ //$NON-NLS-2$
            for(Map.Entry<String, String> entry : ses.getVarsSet())
                global.set(entry.getKey(), entry.getValue());
            if(isUser) {

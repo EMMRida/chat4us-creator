@@ -9,20 +9,20 @@
 			<script></script>
 			<params>
 				<param>
-					<key>max_tokens</key>
-					<value>512</value>
+					<key>ollama_model</key>
+					<value>gemma3:4b</value>
 				</param>
 				<param>
 					<key>app_agent_req_prefix</key>
 					<value></value>
 				</param>
 				<param>
-					<key>temperature</key>
-					<value>0.5</value>
+					<key>ollama_max_tokens</key>
+					<value>512</value>
 				</param>
 				<param>
-					<key>model</key>
-					<value>Llama 3.2 3B Instruct</value>
+					<key>ollama_temperature</key>
+					<value>0.5</value>
 				</param>
 			</params>
 		</ai_model>

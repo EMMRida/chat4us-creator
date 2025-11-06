@@ -1511,6 +1511,8 @@ public class NodePanel extends JPanel {
             //model.addElement("date:interval");	// TODO : Implement this
             //model.addElement("time:any");		// TODO : Implement this
             //model.addElement("time:interval");	// TODO : Implement this
+            model.addElement("date:dd/MM/yyyy"); //$NON-NLS-1$
+            model.addElement("date:MM/dd/yyyy"); //$NON-NLS-1$
             model.addElement("boolean:any"); //$NON-NLS-1$
             model.addElement("matching_list"); //$NON-NLS-1$
             model.addElement("matching_values"); //$NON-NLS-1$

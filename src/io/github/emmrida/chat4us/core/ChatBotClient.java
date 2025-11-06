@@ -5,6 +5,7 @@
 package io.github.emmrida.chat4us.core;
 
 import java.io.File;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -193,14 +194,14 @@ public class ChatBotClient {
             }
         } else if("number:any".equals(data.getValType())) { //$NON-NLS-1$
             try {
-                double n = Double.parseDouble(response);
+                Double.parseDouble(response);
                 botMessages =  processSuccess(ses, data, response);
             } catch(NumberFormatException ex) {
                 botMessages =  processError(ses, data, response);
             }
         } else if("number:equal".equals(data.getValType())) { //$NON-NLS-1$
             try {
-                double n = Double.parseDouble(response);
+                Double.parseDouble(response);
                 if(response.trim().equals(data.getValCondition())) {
                 	botMessages =  processSuccess(ses, data, response);
                 } else botMessages =  processError(ses, data, response);
@@ -223,7 +224,7 @@ public class ChatBotClient {
                             botMessages =  processSuccess(ses, data, response);
                         } else botMessages = processError(ses, data, response);
                     } catch(NumberFormatException ex) {
-                        Helper.logWarning(ex, String.format(Messages.getString("ChatBotClient.INVALID_NUMBER"), response)); //$NON-NLS-1$
+                        //Helper.logWarning(ex, String.format(Messages.getString("ChatBotClient.INVALID_NUMBER"), response)); //$NON-NLS-1$
                         botMessages =  processError(ses, data, response);
                     }
                 }
@@ -233,6 +234,20 @@ public class ChatBotClient {
             if(val == 0 || val == 1) {
                 botMessages =  processSuccess(ses, data, response);
             } else botMessages =  processError(ses, data, response);
+        } else if("date:dd/MM/yyyy".equals(data.getValType())) { //$NON-NLS-1$
+        	try {
+        		Helper.toLocalDateTime(response, "dd/MM/yyyy"); //$NON-NLS-1$
+                botMessages =  processSuccess(ses, data, response);
+            } catch(DateTimeParseException ex) {
+                botMessages =  processError(ses, data, response);
+        	}
+        } else if("date:MM/dd/yyyy".equals(data.getValType())) { //$NON-NLS-1$
+        	try {
+        		Helper.toLocalDateTime(response, "MM/dd/yyyy"); //$NON-NLS-1$
+                botMessages =  processSuccess(ses, data, response);
+            } catch(DateTimeParseException ex) {
+                botMessages =  processError(ses, data, response);
+        	}
         } else if("matching_list".equals(data.getValType())) { //$NON-NLS-1$
         	botMessages = processMatchingList(data, ses, response);
         } else if("matching_values".equals(data.getValType())) { //$NON-NLS-1$
@@ -315,7 +330,7 @@ public class ChatBotClient {
                    global.delete(entry.getKey());
                }
            }
-           global.delete("response");
+           global.delete("response"); //$NON-NLS-1$
            global.delete("ScriptEx"); //$NON-NLS-1$
            global.close();
            v8Runtime.lowMemoryNotification();
@@ -635,6 +650,7 @@ public class ChatBotClient {
                     return processError(ses, nodeData, response);
                 }
                 String msg = curNode.getSucMessage();
+                ses.setCurrentNode(getNodeById(ses.getCurLocale(), nodeData.getSucMoveTo()));
                 return nextSucMessages(ses, msg);
             }
         }

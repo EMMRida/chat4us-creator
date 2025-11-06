@@ -63,6 +63,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -110,7 +112,7 @@ import java.awt.event.InputEvent;
  * @author El Mhadder Mohamed Rida
  */
 public class MainWindow {
-	public static final String CHATBOTS_ROOT_FOLDER = "./chatbots"; //$NON-NLS-1 //$NON-NLS-1$ //$NON-NLS-1$
+	public static final String CHATBOTS_ROOT_FOLDER = "./chatbots"; //$NON-NLS-1 //$NON-NLS-1$ //$NON-NLS-1$ //$NON-NLS-1$
 
 	private static JFrame mainFrame;
 	private static MainWindow mainWindow;
@@ -125,6 +127,8 @@ public class MainWindow {
 	private Timer timer;
 	private HotkeyManager hotKeyManager;
 	private TrayIcon trayIcon;
+
+	private JFileChooser riaFileChooser = null;
 
 	JPopupMenu lstSelBotPopup = null;
 	JPopupMenu lstNoSelBotPopup = null;
@@ -596,6 +600,7 @@ public class MainWindow {
 				cs.setDescription(desc);
 				ChatClient cc = cs.getChatClient();
 				cc.loadChatBotRIA(ria);
+				cs.loadChatModelClients(aiServers);
 				model.addElement(cs);
 				cs.addChatServerListener(new ChatServerListener() {
 					@Override
@@ -748,6 +753,7 @@ public class MainWindow {
 				cc.loadChatBotRIA(ria);
 				old.setEnabled(false);
 				old.stopServer();
+				cs.loadChatModelClients(aiServers);
 				cs.startSecureServer(aadlg.getPassword());
 				aadlg.dispose();
 				ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
@@ -1454,17 +1460,22 @@ public class MainWindow {
 	 * Append recent RIA files into the ChatBot menu.
 	 */
 	private void appendRecentRiaFiles() {
-		int nMax = settings.getMaxRecentFiles();
+		File baseDir = new File("./"); //$NON-NLS-1$
 		mnuOpenedList.removeAll();
+		int nMax = settings.getMaxRecentFiles();
 		List<String> openedRecently = settings.getOpenedRecently();
 		for(int i = 0; i < Math.min(nMax, openedRecently.size()); i++) {
 			final int index = i;
 			final String riaFile = openedRecently.get(index);
-			if(riaFile.length() <= 3) {
+			if(riaFile.isEmpty()) {
+				continue;
+			} else if(Files.notExists(Path.of(riaFile))) {
 				Helper.logWarning(String.format(Messages.getString("MainWindow.INVALID_RIA_FILE"), riaFile), false); //$NON-NLS-1$
 				continue;
 			}
-			JMenuItem mnu = new JMenuItem(openedRecently.get(index));
+			File f = new File(riaFile);
+			String s = Helper.getRelativePath(new File(riaFile), baseDir);
+			JMenuItem mnu = new JMenuItem(s.contains("..") ? f.getAbsolutePath() : s); //$NON-NLS-1$
 			mnu.addActionListener(ev -> {
 				int ri = isRiaFileAlreadyOpened(riaFile);
 				if(ri >= 0) {
@@ -1542,10 +1553,11 @@ public class MainWindow {
 	private void openRiaDocument(String fileName) {
 		String riaFile;
 		if(fileName == null) {
-			JFileChooser dlg = Helper.createFileChooser(Messages.getString("MainWindow.FCO_RIA_TITLE"), CHATBOTS_ROOT_FOLDER, Messages.getString("MainWindow.FCO_RIA_FILTER"), "ria"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-			if(dlg.showOpenDialog(mainFrame) != JFileChooser.APPROVE_OPTION)
+			if(riaFileChooser == null)
+				riaFileChooser = Helper.createFileChooser(Messages.getString("MainWindow.FCO_RIA_TITLE"), CHATBOTS_ROOT_FOLDER, Messages.getString("MainWindow.FCO_RIA_FILTER"), "ria"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+			if(riaFileChooser.showOpenDialog(mainFrame) != JFileChooser.APPROVE_OPTION)
 				return;
-			riaFile = dlg.getSelectedFile().getAbsolutePath();
+			riaFile = riaFileChooser.getSelectedFile().getAbsolutePath();
 		} else riaFile = new File(fileName).getAbsolutePath();
 		int ri = isRiaFileAlreadyOpened(riaFile);
 		if(ri >= 0) {
@@ -1783,7 +1795,7 @@ public class MainWindow {
 	private void initialize() {
 		mainWindow = this;
 		mainFrame = new JFrame();
-		mainFrame.setTitle("Chat4Us " + Helper.getAppVersion()); //$NON-NLS-1$
+		mainFrame.setTitle("Chat4Us-Creator " + Helper.getAppVersion()); //$NON-NLS-1$
 		mainFrame.setSize(new Dimension(800, 600));
 		mainFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		mainFrame.setIconImage(Toolkit.getDefaultToolkit().getImage(MainWindow.class.getResource("/icons/icon-48.png"))); //$NON-NLS-1$
@@ -2300,54 +2312,54 @@ public class MainWindow {
 		mnuOpenGuide = new JMenuItem(Messages.getString("MainWindow.MNU_GUIDE_OPEN")); //$NON-NLS-1$
 		mnuOpenGuide.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/chat4us-creator-user-guide/");
+				Helper.openContent("https://chat4usai.com/chat4us-creator-user-guide/"); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuOpenGuide);
 
-		mnuGetStarted = new JMenuItem(Messages.getString("MainWindow.mntmNewMenuItem_3.text")); //$NON-NLS-1$
+		mnuGetStarted = new JMenuItem(Messages.getString("MainWindow.MNU_GET_STARTED")); //$NON-NLS-1$
 		mnuGetStarted.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/get-started/");
+				Helper.openContent("https://chat4usai.com/get-started/"); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuGetStarted);
 
-		mnuTutorials = new JMenuItem(Messages.getString("MainWindow.mnuTutorials.text")); //$NON-NLS-1$ //$NON-NLS-1$
+		mnuTutorials = new JMenuItem(Messages.getString("MainWindow.MNU_TUTORIALS")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuTutorials.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/tutorials/");
+				Helper.openContent("https://chat4usai.com/tutorials/"); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuTutorials);
 
-		mnuExamples = new JMenuItem(Messages.getString("MainWindow.mntmNewMenuItem_1.text")); //$NON-NLS-1$
+		mnuExamples = new JMenuItem(Messages.getString("MainWindow.MNU_EXAMPLES")); //$NON-NLS-1$
 		mnuExamples.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/chat-bots-examples/");
+				Helper.openContent("https://chat4usai.com/chat-bots-examples/"); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuExamples);
 
-		mnuSampleProjects = new JMenuItem(Messages.getString("MainWindow.mntmNewMenuItem_2.text")); //$NON-NLS-1$
+		mnuSampleProjects = new JMenuItem(Messages.getString("MainWindow.MNU_SAMPLE_PROJECTS")); //$NON-NLS-1$
 		mnuSampleProjects.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/downloads#sample-projects/");
+				Helper.openContent("https://chat4usai.com/downloads#sample-projects/"); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuSampleProjects);
 		mnNewMenu_2.addSeparator();
-		mnuCheck4Updates = new JMenuItem(Messages.getString("MainWindow.mnuCheck4Updates.text")); //$NON-NLS-1$ //$NON-NLS-1$
+		mnuCheck4Updates = new JMenuItem(Messages.getString("MainWindow.MNU_CHECK4UPDATES")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuCheck4Updates.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				Helper.openContent("https://chat4usai.com/downloads/?app=chat4us-creator&version=" + Helper.getAppVersion());
+				Helper.openContent("https://chat4usai.com/downloads/?app=chat4us-creator&version=" + Helper.getAppVersion()); //$NON-NLS-1$
 			}
 		});
 		mnNewMenu_2.add(mnuCheck4Updates);
 		mnNewMenu_2.addSeparator();
 		mnNewMenu_2.add(mnuAbout);
 
-		mnuContribute = new JMenuItem(Messages.getString("MainWindow.mntmNewMenuItem.text")); //$NON-NLS-1$
+		mnuContribute = new JMenuItem(Messages.getString("MainWindow.MNU_CONTRIBUTE")); //$NON-NLS-1$
 		mnNewMenu_2.add(mnuContribute);
 
 		JToolBar toolBar = new JToolBar();
