@@ -9,12 +9,12 @@
 			<script></script>
 			<params>
 				<param>
-					<key>ollama_model</key>
-					<value>gemma3:4b</value>
+					<key>default_error_msg</key>
+					<value>The chat ended due to an unexpected error!</value>
 				</param>
 				<param>
-					<key>app_agent_req_prefix</key>
-					<value></value>
+					<key>ollama_model</key>
+					<value>gemma3:4b</value>
 				</param>
 				<param>
 					<key>ollama_max_tokens</key>
@@ -29,6 +29,31 @@
 	</info>
 	<questions>
 		<question>
+			<id>5</id>
+			<bounds>589;15;100;100</bounds>
+			<message>You&#39;ve got {:points:} right answers.&lt;br&gt;Enter &#39;yes&#39; to continue the quiz with an AI-Model...</message>
+			<response>
+				<condition>
+					<type>text:equal</type>
+					<validation>yes</validation>
+					<on_success>
+						<message>The quiz will continue in a moment...</message>
+						<action>switch_to_ai</action>
+						<value></value>
+						<move>0</move>
+					</on_success>
+					<on_error>
+						<message>The quiz is terminated.</message>
+						<action>end</action>
+						<value></value>
+						<move>0</move>
+					</on_error>
+					<script>
+					</script>
+				</condition>
+			</response>
+		</question>
+		<question>
 			<id>4</id>
 			<bounds>430;15;100;100</bounds>
 			<message>What is the capital of Spain?</message>
@@ -37,10 +62,10 @@
 					<type>text:equal</type>
 					<validation>Madrid</validation>
 					<on_success>
-						<message>Good answer! let&#39;s move to the next one.</message>
-						<action>switch_to_ai</action>
-						<value></value>
-						<move>0</move>
+						<message>Good answer! Score: {:points:} Let&#39;s move to the next one.</message>
+						<action>variable:operation</action>
+						<value>points=+1</value>
+						<move>5</move>
 					</on_success>
 					<on_error>
 						<message>Wrong answer! Try again...</message>
@@ -62,9 +87,9 @@
 					<type>text:equal</type>
 					<validation>Washington</validation>
 					<on_success>
-						<message>Good answer! let&#39;s move to the next one.</message>
-						<action>nop</action>
-						<value></value>
+						<message>Good answer! Score: {:points:} &lt;br&gt;Let&#39;s move to the next one.</message>
+						<action>variable:operation</action>
+						<value>points=+1</value>
 						<move>4</move>
 					</on_success>
 					<on_error>
@@ -80,7 +105,7 @@
 		</question>
 		<question>
 			<id>1</id>
-			<bounds>26;14;100;100</bounds>
+			<bounds>26;13;100;100</bounds>
 			<message>Welcome the country/capital quiz!
 Enter yes to start the quiz, other to end the chat.</message>
 			<response>
@@ -89,12 +114,12 @@ Enter yes to start the quiz, other to end the chat.</message>
 					<validation>yes</validation>
 					<on_success>
 						<message>Great let&#39;s start the quiz now!</message>
-						<action>nop</action>
-						<value></value>
+						<action>variable:operation</action>
+						<value>points=+0</value>
 						<move>2</move>
 					</on_success>
 					<on_error>
-						<message>The chat is now finished.</message>
+						<message>The quiz is now finished.</message>
 						<action>end</action>
 						<value></value>
 						<move>0</move>
@@ -113,9 +138,9 @@ Enter yes to start the quiz, other to end the chat.</message>
 					<type>text:equal</type>
 					<validation>Rabat</validation>
 					<on_success>
-						<message>Good answer! let&#39;s move to the next one.</message>
-						<action>nop</action>
-						<value></value>
+						<message>Good answer! Score: {:points:} &lt;br&gt;Let&#39;s move to the next one.</message>
+						<action>variable:operation</action>
+						<value>points=+1</value>
 						<move>3</move>
 					</on_success>
 					<on_error>
