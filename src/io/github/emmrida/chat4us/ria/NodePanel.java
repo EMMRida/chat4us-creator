@@ -12,6 +12,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Polygon;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.FocusAdapter;
@@ -21,10 +22,10 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
-import java.awt.geom.CubicCurve2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.security.InvalidParameterException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,6 +65,12 @@ public class NodePanel extends JPanel {
 
     /** Default link handle size */
     public static final int LINK_HANDLE_SIZE = 10;
+
+    public static final Color SELECTED_SUCCESS_LINK_COLOR = new Color(0, 255, 0);
+    public static final Color UNSELECTED_SUCCESS_LINK_COLOR = new Color(0, 160, 0);
+
+    public static final Color SELECTED_ERROR_LINK_COLOR = new Color(255, 0, 0);
+    public static final Color UNSELECTED_ERROR_LINK_COLOR = new Color(160, 0, 0);
 
     /**
      * The Enum RESIZE_DIR.
@@ -212,6 +219,7 @@ public class NodePanel extends JPanel {
             public void focusGained(FocusEvent e) {
             	selected = true;
                 repaint();
+                editor.repaint();
                 editor.fillChatBotMenu();
             }
 
@@ -219,6 +227,7 @@ public class NodePanel extends JPanel {
             public void focusLost(FocusEvent e) {
 				selected = false;
                 repaint();
+                editor.repaint();
             }
         });
 
@@ -577,136 +586,114 @@ public class NodePanel extends JPanel {
      * Paint arrows and node states on parent editor.
      *
      * @param g the graphics object
+     * @param rects the list of rectangles to avoid collisions
      */
-    public void paintOnParent(Graphics g) {
+    public void paintOnParent(Graphics g, List<Rectangle> rects) {
+    	Color sucColor = this.hasFocus() ? SELECTED_SUCCESS_LINK_COLOR : UNSELECTED_SUCCESS_LINK_COLOR;
+    	Color errColor = this.hasFocus() ? SELECTED_ERROR_LINK_COLOR : UNSELECTED_ERROR_LINK_COLOR;
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         if(relSuccessPanel != null) {
         	assert thisData.getSucMoveTo() == relSuccessPanel.getData().getId();
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(relSuccessPanel.getX(), relSuccessPanel.getY() + relSuccessPanel.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
         }
         if(relErrorPanel != null) {
         	assert thisData.getErrMoveTo() == relErrorPanel.getData().getId();
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(relErrorPanel.getX(), relErrorPanel.getY() + relErrorPanel.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
         }
         if("script".equals(thisData.getValType())) { //$NON-NLS-1$
             g2d.drawImage(imgSettings, this.getX() + this.getWidth() + 25, this.getY() + this.getHeight()/2 - imgSettings.getHeight()/2/2, imgSettings.getWidth()/2,  imgSettings.getHeight()/2, null);
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
         }
 
         if("switch_to_ai".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-           	drawLink(g2d, Color.GREEN, startPoint, endPoint);
+           	drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgAI, endPoint.x - 25, endPoint.y-imgAI.getHeight()/2-5, imgAI.getWidth()/2, imgAI.getHeight()/2, null);
         }
         if("switch_to_ai".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-           	drawLink(g2d, Color.RED, startPoint, endPoint);
+           	drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgAI, endPoint.x - 25, endPoint.y+5, imgAI.getWidth()/2, imgAI.getHeight()/2, null);
         }
         if("switch_to_agent".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-           	drawLink(g2d, Color.GREEN, startPoint, endPoint);
+           	drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgAgent, endPoint.x - 25, endPoint.y-imgAgent.getHeight()/2-5, imgAgent.getWidth()/2, imgAgent.getHeight()/2, null);
         }
         if("switch_to_agent".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-           	drawLink(g2d, Color.RED, startPoint, endPoint);
+           	drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgAgent, endPoint.x - 25, endPoint.y+5, imgAgent.getWidth()/2, imgAgent.getHeight()/2, null);
         }
         if("end".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgExit, endPoint.x - 25, endPoint.y-imgExit.getHeight()/2-5, imgExit.getWidth()/2, imgExit.getHeight()/2, null);
         }
         if("end".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgExit, endPoint.x - 25, endPoint.y+5, imgExit.getWidth()/2, imgExit.getHeight()/2, null);
         }
         if("repeat".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgReplay, endPoint.x - 25, endPoint.y-imgReplay.getHeight()/2-5, imgReplay.getWidth()/2, imgReplay.getHeight()/2, null);
         }
         if("repeat".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgReplay, endPoint.x - 25, endPoint.y+5, imgReplay.getWidth()/2, imgReplay.getHeight()/2, null);
         }
         if("restart".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgRestart, endPoint.x - 25, endPoint.y-imgRestart.getHeight()/2-5, imgRestart.getWidth()/2, imgRestart.getHeight()/2, null);
         }
         if("restart".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgRestart, endPoint.x - 25, endPoint.y+5, imgRestart.getWidth()/2, imgRestart.getHeight()/2, null);
         }
         if("matching_list".equals(thisData.getValType())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgMatchList, endPoint.x - 25, endPoint.y-imgMatchList.getHeight()/2-5, imgMatchList.getWidth()/2, imgMatchList.getHeight()/2, null);
 	        Map<String, Integer> map = ChatBotClient.extractMatchingList(thisData.getValCondition());
 	        if(map.size() > 0) {
+	        	int v;
+	        	NodePanel rip;
 	        	RiaEditorPanel parent = (RiaEditorPanel)getParent();
 		        for(Map.Entry<String, Integer> e : map.entrySet()) {
-			       int v = e.getValue();
+			       v = e.getValue();
 			       if(v > 0) {
-				       NodePanel rip = parent.getNodeById(v);
+				       rip = parent.getNodeById(v);
 				       if(rip != null) {
 					       startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
 					       endPoint = new Point(rip.getX(), rip.getY() + rip.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
-					       drawLink(g2d, Color.GREEN, startPoint, endPoint);
+					       drawLink(g2d, sucColor, startPoint, endPoint, rects);
 				       }
-			       } else {
-			    	   /*
-			            Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
-			            Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-			            drawLink(g2d, Color.GREEN, startPoint, endPoint);
-			            BufferedImage img = null;
-			            switch(v) {
-			            	case 0: // Repeat
-			            		img = imgReplay;
-			            		break;
-			            	case -1: // End
-			            		img = imgExit;
-			            		break;
-			            	case -2: // Restart
-			            		img = imgRestart;
-			            		break;
-			            	case -3: // Switch to AI
-			            		img = imgAI;
-			            		break;
-			            	case -4: // Switch to Agent
-			            		img = imgAgent;
-			            		break;
-			            }
-			            if(img != null) {
-			            	g2d.drawImage(img, endPoint.x - 25, endPoint.y-img.getHeight()/2-5, img.getWidth()/2, img.getHeight()/2, null);
-			            } else Helper.logError(Messages.getString("NodePanel.LOG_ERR_RID_INVALID") + v); //$NON-NLS-1$
-			            */
 			       }
 		        }
 	        }
@@ -714,23 +701,23 @@ public class NodePanel extends JPanel {
         if("user_locale:user_value".equals(thisData.getSucAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.GREEN, startPoint, endPoint);
+            drawLink(g2d, sucColor, startPoint, endPoint, rects);
             g2d.drawImage(imgLocale, endPoint.x - 25, endPoint.y-imgLocale.getHeight()/2-5, imgLocale.getWidth()/2, imgLocale.getHeight()/2, null);
         }
 		if("user_locale:user_value".equals(thisData.getErrAction())) { //$NON-NLS-1$
             Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
             Point endPoint = new Point(startPoint.x + 25, startPoint.y);
-            drawLink(g2d, Color.RED, startPoint, endPoint);
+            drawLink(g2d, errColor, startPoint, endPoint, rects);
             g2d.drawImage(imgLocale, endPoint.x - 25, endPoint.y+5, imgLocale.getWidth()/2, imgLocale.getHeight()/2, null);
 		}
         if(linking != LINK_DIR.NONE) {
             Point endPoint = editor.getMousePosition();
             if(linking == LINK_DIR.SUCCESS) {
                 Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 - LINK_HANDLE_SIZE/2-1);
-                drawLink(g2d, Color.GREEN, startPoint, endPoint);
+                drawLink(g2d, sucColor, startPoint, endPoint, rects);
             } else if(linking == LINK_DIR.ERROR) {
                 Point startPoint = new Point(this.getX() + this.getWidth(), this.getY() + this.getHeight()/2 + LINK_HANDLE_SIZE/2+1);
-                drawLink(g2d, Color.RED, startPoint, endPoint);
+                drawLink(g2d, errColor, startPoint, endPoint, rects);
             }
         }
     }
@@ -742,7 +729,7 @@ public class NodePanel extends JPanel {
      * @param color the color of the arrow
      * @param startPoint the start point
      * @param endPoint the end point
-     */
+     *//*
     private void drawLink(Graphics2D g2d, Color color, Point startPoint, Point endPoint) {
         // Calculate control points for the Bezier curve
         int controlOffsetX = (int)Math.round((double)Math.abs(startPoint.x - endPoint.x) * 0.5d);
@@ -761,7 +748,7 @@ public class NodePanel extends JPanel {
 
         // Draw arrowhead
         drawArrowHead(g2d, endPoint, control2, 10);
-    }
+    }*/
 
     /**
      * Paint the node graphics content.
@@ -792,9 +779,9 @@ public class NodePanel extends JPanel {
             g2d.setColor(Color.ORANGE);
             g2d.fillRect(0, getHeight()/2 - LINK_HANDLE_SIZE/2-1, LINK_HANDLE_SIZE, LINK_HANDLE_SIZE);
         }
-        g2d.setColor(Color.GREEN);
+        g2d.setColor(isSelected() ? SELECTED_SUCCESS_LINK_COLOR : UNSELECTED_SUCCESS_LINK_COLOR);
         g2d.fillRect(getWidth()-LINK_HANDLE_SIZE, getHeight()/2 - LINK_HANDLE_SIZE-1, LINK_HANDLE_SIZE, LINK_HANDLE_SIZE);
-        g2d.setColor(Color.RED);
+        g2d.setColor(isSelected() ? SELECTED_ERROR_LINK_COLOR : UNSELECTED_ERROR_LINK_COLOR);
         g2d.fillRect(getWidth()-LINK_HANDLE_SIZE, getHeight()/2 + 1, LINK_HANDLE_SIZE, LINK_HANDLE_SIZE);
     }
 
@@ -805,7 +792,7 @@ public class NodePanel extends JPanel {
      * @param tip the tip
      * @param tail the tail
      * @param arrowHeadSize the arrow head size
-     */
+     *//*
     private void drawArrowHead(Graphics2D g2d, Point tip, Point tail, int arrowHeadSize) {
         // Ensure there is a minimum distance for stable angle calculation
         double dx = tip.x - tail.x;
@@ -843,7 +830,7 @@ public class NodePanel extends JPanel {
 
         // Fill the arrowhead
         g2d.fill(arrowHead);
-    }
+    }*/
 
     /**
      * Sets the related success panel.
@@ -904,13 +891,442 @@ public class NodePanel extends JPanel {
     }
 
     /**
+     * Sets the data, overwrite current node data and set the id.
+     * To use when pasting a node from clipboard.
+     * @param data The new data
+     * @param id The new id
+     */
+    public void setData(Data data, int id) {
+    	if(id < 0)
+    		throw new IllegalArgumentException();
+    	setData(data);
+    	thisData.id = id;
+    }
+
+    /**
      * Checks if is selected.
      *
      * @return true, if is selected
      */
     public boolean isSelected() { return selected; }
-    ///////////////////////////////////////////////////////////////////////////
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Connections drawing methodes
+    ///////////////////////////////////////////////////////////////////////////
+    private void drawLink(Graphics2D g2d, Color color, Point startPoint, Point endPoint, List<Rectangle> rectangles) {
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2));
+
+        // If there are no obstacles or line doesn't cross any rectangles, draw straight diagonal line
+        if (rectangles.isEmpty() || !doesLineCrossAnyRectangle(startPoint, endPoint, rectangles)) {
+            drawArrowLine(g2d, startPoint, endPoint);
+            return;
+        }
+
+        // Find a path that avoids rectangles using diagonal routing
+        List<Point> path = findDiagonalPath(startPoint, endPoint, rectangles, 3); // 3 levels max
+
+        // Draw the polyline with arrows
+        drawPolylineWithArrows(g2d, path);
+    }
+
+    private void drawArrowLine(Graphics2D g2d, Point start, Point end) {
+        g2d.drawLine(start.x, start.y, end.x, end.y);
+        drawArrowHead(g2d, end, start);
+    }
+
+    private void drawPolylineWithArrows(Graphics2D g2d, List<Point> path) {
+        // Draw the connecting lines
+        for (int i = 0; i < path.size() - 1; i++) {
+            g2d.drawLine(path.get(i).x, path.get(i).y, path.get(i + 1).x, path.get(i + 1).y);
+        }
+
+        // Draw arrow at the end
+        if (path.size() >= 2) {
+            Point lastSegmentStart = path.get(path.size() - 2);
+            Point lastSegmentEnd = path.get(path.size() - 1);
+            drawArrowHead(g2d, lastSegmentEnd, lastSegmentStart);
+        }
+    }
+
+    private void drawArrowHead(Graphics2D g2d, Point tip, Point tail) {
+        double angle = Math.atan2(tip.y - tail.y, tip.x - tail.x);
+        int arrowLength = 12;
+        int arrowWidth = 5;
+
+        Polygon arrowHead = new Polygon();
+        arrowHead.addPoint(tip.x, tip.y);
+        arrowHead.addPoint(
+            (int) (tip.x - arrowLength * Math.cos(angle) - arrowWidth * Math.sin(angle)),
+            (int) (tip.y - arrowLength * Math.sin(angle) + arrowWidth * Math.cos(angle))
+        );
+        arrowHead.addPoint(
+            (int) (tip.x - arrowLength * Math.cos(angle) + arrowWidth * Math.sin(angle)),
+            (int) (tip.y - arrowLength * Math.sin(angle) - arrowWidth * Math.cos(angle))
+        );
+
+        g2d.fill(arrowHead);
+    }
+
+    // Diagonal pathfinding - avoids horizontal/vertical lines
+    private List<Point> findDiagonalPath(Point start, Point end, List<Rectangle> obstacles, int maxLevel) {
+        // Try straight diagonal line first
+        if (!doesLineCrossAnyRectangle(start, end, obstacles)) {
+            List<Point> path = new ArrayList<>();
+            path.add(start);
+            path.add(end);
+            return path;
+        }
+
+        // Try diagonal routing with intermediate points
+        List<Point> diagonalPath = findSimpleDiagonalPath(start, end, obstacles);
+        if (diagonalPath != null && !doesPathCrossAnyRectangle(diagonalPath, obstacles)) {
+            return diagonalPath;
+        }
+
+        // Try multi-segment diagonal routing with increasing complexity
+        return findMultiSegmentDiagonalPath(start, end, obstacles, maxLevel, 0);
+    }
+
+    private List<Point> findSimpleDiagonalPath(Point start, Point end, List<Rectangle> obstacles) {
+        List<Point> path = new ArrayList<>();
+        path.add(start);
+
+        // Generate diagonal intermediate points
+        List<Point> diagonalPoints = generateDiagonalPoints(start, end, obstacles, 1);
+
+        for (Point intermediate : diagonalPoints) {
+            if (!doesLineCrossAnyRectangle(start, intermediate, obstacles) &&
+                !doesLineCrossAnyRectangle(intermediate, end, obstacles)) {
+                path.add(intermediate);
+                path.add(end);
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private List<Point> findMultiSegmentDiagonalPath(Point start, Point end, List<Rectangle> obstacles, int maxLevel, int currentLevel) {
+        if (currentLevel >= maxLevel) {
+            // Fallback: use curved path
+            return findCurvedPath(start, end, obstacles);
+        }
+
+        List<Point> bestPath = null;
+        double bestScore = Double.MAX_VALUE;
+
+        // Generate multiple candidate diagonal paths
+        List<List<Point>> candidatePaths = generateDiagonalCandidates(start, end, obstacles, currentLevel + 1);
+
+        for (List<Point> candidate : candidatePaths) {
+            if (!doesPathCrossAnyRectangle(candidate, obstacles)) {
+                double score = calculateDiagonalPathScore(candidate);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestPath = candidate;
+                }
+            }
+        }
+
+        if (bestPath != null) {
+            return bestPath;
+        }
+
+        // If no good path found, try with more segments
+        return findMultiSegmentDiagonalPath(start, end, obstacles, maxLevel, currentLevel + 1);
+    }
+
+    private List<Point> generateDiagonalPoints(Point start, Point end, List<Rectangle> obstacles, int numPoints) {
+        List<Point> points = new ArrayList<>();
+        int padding = 20;
+
+        // Calculate the main diagonal direction
+        int dx = end.x - start.x;
+        int dy = end.y - start.y;
+
+        // Generate points along diagonal directions from obstacles
+        for (Rectangle rect : obstacles) {
+            if (lineIntersectsRectangle(start, end, rect)) {
+                // Add diagonal points around obstacles (avoiding horizontal/vertical)
+                points.add(new Point(rect.x - padding, rect.y - padding)); // NW
+                points.add(new Point(rect.x + rect.width + padding, rect.y - padding)); // NE
+                points.add(new Point(rect.x - padding, rect.y + rect.height + padding)); // SW
+                points.add(new Point(rect.x + rect.width + padding, rect.y + rect.height + padding)); // SE
+
+                // Diagonal midpoints
+                points.add(new Point(rect.x - padding, rect.y + rect.height / 2)); // W-center (diagonal approach)
+                points.add(new Point(rect.x + rect.width + padding, rect.y + rect.height / 2)); // E-center
+                points.add(new Point(rect.x + rect.width / 2, rect.y - padding)); // N-center
+                points.add(new Point(rect.x + rect.width / 2, rect.y + rect.height + padding)); // S-center
+            }
+        }
+
+        // Add diagonal grid points
+        int gridSteps = 3;
+        for (int i = 1; i < gridSteps; i++) {
+            double t = (double) i / gridSteps;
+            int baseX = start.x + (int)(t * (end.x - start.x));
+            int baseY = start.y + (int)(t * (end.y - start.y));
+
+            // Add points in diagonal directions (no pure horizontal/vertical)
+            int offset = 30;
+            points.add(new Point(baseX + offset, baseY + offset)); // SE
+            points.add(new Point(baseX + offset, baseY - offset)); // NE
+            points.add(new Point(baseX - offset, baseY + offset)); // SW
+            points.add(new Point(baseX - offset, baseY - offset)); // NW
+
+            // Longer diagonal offsets
+            points.add(new Point(baseX + offset * 2, baseY + offset));
+            points.add(new Point(baseX + offset, baseY + offset * 2));
+            points.add(new Point(baseX - offset * 2, baseY - offset));
+            points.add(new Point(baseX - offset, baseY - offset * 2));
+        }
+
+        return points;
+    }
+
+    private List<List<Point>> generateDiagonalCandidates(Point start, Point end, List<Rectangle> obstacles, int segmentCount) {
+        List<List<Point>> candidates = new ArrayList<>();
+
+        List<Point> diagonalPoints = generateDiagonalPoints(start, end, obstacles, segmentCount);
+
+        // Generate 2-segment diagonal paths
+        for (Point intermediate : diagonalPoints) {
+            List<Point> path2 = new ArrayList<>();
+            path2.add(start);
+            path2.add(intermediate);
+            path2.add(end);
+            candidates.add(path2);
+
+            // Generate 3-segment diagonal paths
+            if (segmentCount >= 2) {
+                for (Point intermediate2 : diagonalPoints) {
+                    if (!intermediate2.equals(intermediate)) {
+                        // Check if this creates a diagonal path (no horizontal/vertical segments)
+                        if (isDiagonalSegment(start, intermediate) &&
+                            isDiagonalSegment(intermediate, intermediate2) &&
+                            isDiagonalSegment(intermediate2, end)) {
+
+                            List<Point> path3 = new ArrayList<>();
+                            path3.add(start);
+                            path3.add(intermediate);
+                            path3.add(intermediate2);
+                            path3.add(end);
+                            candidates.add(path3);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add bezier curve approximation as candidate
+        List<Point> bezierPath = generateBezierPath(start, end, obstacles);
+        if (bezierPath != null) {
+            candidates.add(bezierPath);
+        }
+
+        return candidates;
+    }
+
+    private boolean isDiagonalSegment(Point p1, Point p2) {
+        return p1.x != p2.x && p1.y != p2.y;
+    }
+
+    private boolean isHorizontalOrVertical(Point p1, Point p2) {
+        return p1.x == p2.x || p1.y == p2.y;
+    }
+
+    private double calculateDiagonalPathScore(List<Point> path) {
+        double totalLength = 0;
+        int diagonalSegments = 0;
+        int straightSegments = 0;
+
+        for (int i = 0; i < path.size() - 1; i++) {
+            Point p1 = path.get(i);
+            Point p2 = path.get(i + 1);
+            totalLength += p1.distance(p2);
+
+            if (isDiagonalSegment(p1, p2)) {
+                diagonalSegments++;
+            } else if (isHorizontalOrVertical(p1, p2)) {
+                straightSegments++; // Penalize horizontal/vertical
+            }
+        }
+
+        // Heavy penalty for horizontal/vertical segments
+        double straightPenalty = straightSegments * 1000;
+
+        // Penalize too many segments
+        double segmentPenalty = (path.size() - 2) * 10;
+
+        // Reward smooth diagonal paths
+        double smoothnessBonus = calculateSmoothnessBonus(path);
+
+        return totalLength + straightPenalty + segmentPenalty - smoothnessBonus;
+    }
+
+    private double calculateSmoothnessBonus(List<Point> path) {
+        double bonus = 0;
+
+        for (int i = 1; i < path.size() - 1; i++) {
+            Point prev = path.get(i - 1);
+            Point curr = path.get(i);
+            Point next = path.get(i + 1);
+
+            // Calculate angles between segments
+            double angle1 = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+            double angle2 = Math.atan2(next.y - curr.y, next.x - curr.x);
+            double angleDiff = Math.abs(angle1 - angle2);
+
+            // Normalize angle difference
+            while (angleDiff > Math.PI) {
+                angleDiff = 2 * Math.PI - angleDiff;
+            }
+
+            // Reward smooth turns (angles close to 135 or 45 degrees)
+            if (angleDiff > Math.toRadians(30) && angleDiff < Math.toRadians(150)) {
+                bonus += 20;
+            }
+        }
+
+        return bonus;
+    }
+
+    private List<Point> generateBezierPath(Point start, Point end, List<Rectangle> obstacles) {
+        // Simple bezier curve approximation with control points
+        List<Point> path = new ArrayList<>();
+        path.add(start);
+
+        // Calculate control points that avoid obstacles
+        int dx = end.x - start.x;
+        int dy = end.y - start.y;
+
+        // Control points at 1/3 and 2/3 of the distance, offset diagonally
+        Point control1 = new Point(
+            start.x + dx / 3 + dy / 6,
+            start.y + dy / 3 - dx / 6
+        );
+
+        Point control2 = new Point(
+            start.x + 2 * dx / 3 - dy / 6,
+            start.y + 2 * dy / 3 + dx / 6
+        );
+
+        // Sample bezier curve at multiple points
+        int samples = 8;
+        for (int i = 1; i < samples; i++) {
+            double t = (double) i / samples;
+            Point point = calculateBezierPoint(start, control1, control2, end, t);
+            path.add(point);
+        }
+
+        path.add(end);
+
+        // Check if this bezier path avoids obstacles
+        if (!doesPathCrossAnyRectangle(path, obstacles)) {
+            return path;
+        }
+
+        return null;
+    }
+
+    private Point calculateBezierPoint(Point p0, Point p1, Point p2, Point p3, double t) {
+        double u = 1 - t;
+        double tt = t * t;
+        double uu = u * u;
+        double uuu = uu * u;
+        double ttt = tt * t;
+
+        double x = uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x;
+        double y = uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y;
+
+        return new Point((int) x, (int) y);
+    }
+
+    private List<Point> findCurvedPath(Point start, Point end, List<Rectangle> obstacles) {
+        // Final fallback - use a curved path around the center
+        List<Point> path = new ArrayList<>();
+        path.add(start);
+
+        Point center = new Point((start.x + end.x) / 2, (start.y + end.y) / 2);
+
+        // Try different curved paths
+        List<Point> curveVariations = new ArrayList<>();
+
+        // Arc above
+        curveVariations.add(new Point(center.x - Math.abs(end.y - start.y) / 3, center.y - Math.abs(end.x - start.x) / 3));
+        // Arc below
+        curveVariations.add(new Point(center.x + Math.abs(end.y - start.y) / 3, center.y + Math.abs(end.x - start.x) / 3));
+        // S-curve
+        curveVariations.add(new Point(start.x + (end.x - start.x) / 3, start.y + (end.y - start.y) * 2 / 3));
+        curveVariations.add(new Point(start.x + (end.x - start.x) * 2 / 3, start.y + (end.y - start.y) / 3));
+
+        for (Point curvePoint : curveVariations) {
+            if (!doesLineCrossAnyRectangle(start, curvePoint, obstacles) &&
+                !doesLineCrossAnyRectangle(curvePoint, end, obstacles)) {
+                path.add(curvePoint);
+                path.add(end);
+                return path;
+            }
+        }
+
+        // Ultimate fallback - direct line (will cross obstacles)
+        path.clear();
+        path.add(start);
+        path.add(end);
+        return path;
+    }
+
+    private boolean doesPathCrossAnyRectangle(List<Point> path, List<Rectangle> obstacles) {
+        for (int i = 0; i < path.size() - 1; i++) {
+            if (doesLineCrossAnyRectangle(path.get(i), path.get(i + 1), obstacles)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Existing collision detection methods (unchanged)
+    private boolean doesLineCrossAnyRectangle(Point p1, Point p2, List<Rectangle> rectangles) {
+        for (Rectangle rect : rectangles) {
+            if (lineIntersectsRectangle(p1, p2, rect)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean lineIntersectsRectangle(Point p1, Point p2, Rectangle rect) {
+        return lineIntersectsLine(p1, p2,
+                new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y)) ||
+               lineIntersectsLine(p1, p2,
+                new Point(rect.x + rect.width, rect.y), new Point(rect.x + rect.width, rect.y + rect.height)) ||
+               lineIntersectsLine(p1, p2,
+                new Point(rect.x, rect.y + rect.height), new Point(rect.x + rect.width, rect.y + rect.height)) ||
+               lineIntersectsLine(p1, p2,
+                new Point(rect.x, rect.y), new Point(rect.x, rect.y + rect.height));
+    }
+
+    private boolean lineIntersectsLine(Point p1, Point p2, Point p3, Point p4) {
+        int d1 = direction(p3, p4, p1);
+        int d2 = direction(p3, p4, p2);
+        int d3 = direction(p1, p2, p3);
+        int d4 = direction(p1, p2, p4);
+
+        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+            ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private int direction(Point p1, Point p2, Point p3) {
+        return (p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x);
+    }
+    ///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
     /**
      * The Class Data for a node that is loaded from RIA files.
      */

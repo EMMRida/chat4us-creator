@@ -21,6 +21,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -179,11 +180,13 @@ public class RiaEditorPanel extends JPanel {
 		});
 		menu.add(mnuSave);
 		menu.addSeparator();
+		JMenuItem originalItem;
+        JMenuItem clonedItem;
 		JMenuItem mnuPaste = null;
 		for(int i = 0; i < popupMenu.getComponentCount(); i++) {
            if(popupMenu.getComponent(i) instanceof JMenuItem) {
-                JMenuItem originalItem = (JMenuItem) popupMenu.getComponent(i);
-                JMenuItem clonedItem = new JMenuItem(originalItem.getText());
+                originalItem = (JMenuItem) popupMenu.getComponent(i);
+                clonedItem = new JMenuItem(originalItem.getText());
                 if(clonedItem.getText().equals(Messages.getString("RiaEditorPanel.MNU_PASTE"))) //$NON-NLS-1$
                     mnuPaste = clonedItem;
                 for (ActionListener al : originalItem.getActionListeners())
@@ -277,9 +280,10 @@ public class RiaEditorPanel extends JPanel {
 		JMenuItem mnuRemoveAll = new JMenuItem(Messages.getString("RiaEditorPanel.MNU_DEL_ALL")); //$NON-NLS-1$
 		mnuRemoveAll.addActionListener(e -> {
 			if(JOptionPane.YES_OPTION == Helper.showConfirmDialog(MainWindow.getFrame(), Messages.getString("RiaEditorPanel.MB_DELALL_MSG"), Messages.getString("RiaEditorPanel.MB_DELALL_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1)) { //$NON-NLS-1$ //$NON-NLS-2$
+				NodePanel node;
 				for(Component c : getComponents()) {
 					if(c instanceof NodePanel) {
-						NodePanel node = (NodePanel)c;
+						node = (NodePanel)c;
 						addNodeState(NodeState.OPERATION.OP_ROUTE_DELETED, node);
 					}
 				}
@@ -368,7 +372,7 @@ public class RiaEditorPanel extends JPanel {
 			NodePanel node = new NodePanel(this, nextId);
 			data.setBounds(pos.x, pos.y, data.getWidth(), data.getHeight());
 			node.setBounds(pos.x, pos.y, data.getWidth(), data.getHeight());
-			node.setData(data);
+			node.setData(data, nextId);
 			add(node);
 			updateSize();
 			NodePanel suc = getNodeById(data.getSucMoveTo());
@@ -413,13 +417,22 @@ public class RiaEditorPanel extends JPanel {
 	public void paintComponent(java.awt.Graphics g) {
 		super.paintComponent(g);
 
+		// TODO : Cache rectangles list
+    	List<Rectangle> rects = new ArrayList<>();
+    	for(Component c : getComponents()) {
+        	if(c instanceof NodePanel) {
+            	NodePanel np = (NodePanel)c;
+           		rects.add(np.getBounds());
+        	}
+    	}
+
 		Rectangle clip = g.getClipBounds();
 		for(Component c : getComponents())
 			if(c instanceof NodePanel)
 				if(clip.intersects(clip.getBounds()))
-					((NodePanel)c).paintOnParent(g);
+					((NodePanel)c).paintOnParent(g, rects);
 		if(routeItemToLink != null)
-			routeItemToLink.paintOnParent(g);
+			routeItemToLink.paintOnParent(g, rects);
 	}
 
 	/**
@@ -497,47 +510,56 @@ public class RiaEditorPanel extends JPanel {
         this.botName = Helper.getNodeValue(nodes, "name"); //$NON-NLS-1$
         this.botGuidelines = Helper.getNodeValue(nodes, "guidelines"); //$NON-NLS-1$
         this.botScript = Helper.unescapeHtml(Helper.getNodeValue(nodes, "script")); //$NON-NLS-1$
+        Node node;
+        Node item;
+        String param;
+        String value;
         nodes = document.getElementsByTagName("params").item(0).getChildNodes(); //$NON-NLS-1$
         for(int i = 0; i < nodes.getLength(); i++) {
-        	Node node = nodes.item(i);
+        	node = nodes.item(i);
         	if(node.getNodeType() == Node.ELEMENT_NODE) {
-        		Node item = Helper.getNodeByName(node.getChildNodes(), "key").getChildNodes().item(0); //$NON-NLS-1$
-	        	String param = ""; //$NON-NLS-1$
+        		item = Helper.getNodeByName(node.getChildNodes(), "key").getChildNodes().item(0); //$NON-NLS-1$
+	        	param = ""; //$NON-NLS-1$
 	        	if(item != null)
 	        		param = item.getNodeValue();
 	        	item = Helper.getNodeByName(node.getChildNodes(), "value").getChildNodes().item(0); //$NON-NLS-1$
-	        	String value = ""; //$NON-NLS-1$
+	        	value = ""; //$NON-NLS-1$
 	        	if(item != null)
 	        		value = item.getNodeValue();
 	        	this.botParams.put(param, value);
         	}
         }
 
+        NodePanel np;
+        NodePanel.Data data;
         nodes = document.getElementsByTagName("question"); //$NON-NLS-1$
         for(int i = 0; i < nodes.getLength(); i++) {
-        	Node node = nodes.item(i);
-        	NodePanel.Data data = NodePanel.Data.fromXml(node);
-			NodePanel np = addNode(data.getXPos(), data.getYPos());
+        	node = nodes.item(i);
+        	data = NodePanel.Data.fromXml(node);
+			np = addNode(data.getXPos(), data.getYPos());
 			np.setData(data);
 			nextId = data.getId() + 1;
         }
 
+        NodePanel nodeTo;
 		for(Component c : getComponents()) {
 			if(c instanceof NodePanel) {
-				NodePanel node = (NodePanel)c;
-				NodePanel.Data data = node.getData();
+				np = (NodePanel)c;
+				data = np.getData();
 				if(data.getSucMoveTo() != 0) {
-					NodePanel nodeTo = getNodeById(data.getSucMoveTo());
+					nodeTo = getNodeById(data.getSucMoveTo());
 					if(nodeTo != null)
-						node.setRelSuccessPanel(nodeTo);
+						np.setRelSuccessPanel(nodeTo);
 				}
 				if(data.getErrMoveTo() != 0) {
-					NodePanel nodeTo = getNodeById(data.getErrMoveTo());
+					nodeTo = getNodeById(data.getErrMoveTo());
 					if(nodeTo != null)
-						node.setRelErrorPanel(nodeTo);
+						np.setRelErrorPanel(nodeTo);
 				}
 			}
 		}
+		undoStack.clear();
+        redoStack.clear();
 		setModified(false);
 		repaint();
 	}
@@ -598,13 +620,15 @@ public class RiaEditorPanel extends JPanel {
 	 */
 	public void removeNode(NodePanel node) {
 		if(node == null) return;
+		NodePanel r;
+		NodePanel.Data data;
 		node.setRelSuccessPanel(null);
 		node.setRelErrorPanel(null);
 		for(Component c : getComponents()) {
 			if(c instanceof NodePanel) {
-				NodePanel r = (NodePanel)c;
+				r = (NodePanel)c;
 				if(!node.equals(r)) {
-					NodePanel.Data data = r.getData();
+					data = r.getData();
 					if(data.getSucMoveTo() == node.getData().getId()) {
 						//addRipState(NodeState.OPERATION.OP_LINK_DELETED, r);
 						data.setSucMoveTo(0);

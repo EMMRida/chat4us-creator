@@ -10,11 +10,13 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 import javax.imageio.ImageIO;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.ListCellRenderer;
-
 import io.github.emmrida.chat4us.core.ChatServer;
 import io.github.emmrida.chat4us.core.ChatServer.ChatServerListener;
 import io.github.emmrida.chat4us.core.ChatSession.ChatSessionState;
@@ -36,20 +38,16 @@ public class ChatServerListCellRenderer extends JPanel implements ListCellRender
 	private static BufferedImage imgWebsite = null;
 	private static BufferedImage imgDisabled = null;
 
-	private BufferedImage curImage = null;
-
-	private int index;
-	private boolean selected;
-	private boolean hasFocus;
-	private ChatServer chatServer; // item value
-	private JList<ChatServer> parentList;
-
-	private long lastTime = 0;
+	/** Current UI state */
+	private ChatServerUI curUI;
+	/** UI state for each ChatServer */
+	private Map<ChatServer, ChatServerUI> uiMap;
 
 	/**
 	 * Init ChatServerListCellRenderer instance
 	 */
 	public ChatServerListCellRenderer() {
+		uiMap = new WeakHashMap<ChatServer, ChatServerUI>();
 		if(imgSnooze == null) {
 			try {
 				imgSnooze = ImageIO.read(getClass().getResource("/snooze.png")); //$NON-NLS-1$
@@ -58,7 +56,6 @@ public class ChatServerListCellRenderer extends JPanel implements ListCellRender
 				imgAgent = ImageIO.read(getClass().getResource("/agent.png")); //$NON-NLS-1$
 				imgDisabled = ImageIO.read(getClass().getResource("/link_off.png")); //$NON-NLS-1$
 				imgWebsite = ImageIO.read(getClass().getResource("/web.png")); //$NON-NLS-1$
-				this.curImage = imgSnooze;
 			} catch (IOException ex) {
 				Helper.logError(ex, Messages.getString("ChatServerListCellRenderer.ERROR_LOADING_ICONS"), true); //$NON-NLS-1$
 			}
@@ -68,59 +65,119 @@ public class ChatServerListCellRenderer extends JPanel implements ListCellRender
 
 	@Override
 	public Component getListCellRendererComponent(JList<? extends ChatServer> list, ChatServer value, int index, boolean isSelected, boolean cellHasFocus) {
-		this.index = index;
-		this.selected = isSelected;
-		this.hasFocus = cellHasFocus;
-		this.chatServer = value;
-		this.parentList = (JList<ChatServer>)list;
-		if(value != null && !value.equals(this.chatServer)) {
-			this.chatServer.addChatServerListener(new ChatServerListener() {
-				@Override
-				public void onActivityStateChanged(ChatServer server, ChatSessionState state) {
-					switch(state) {
-						case CHATBOT: curImage = imgChatBot; break;
-						case AIMODEL: curImage = imgAi;      break;
-						case AGENT:   curImage = imgAgent;   break;
-						case WEBSITE: curImage = imgWebsite; break;
-					}
-					lastTime = System.currentTimeMillis();
-					list.repaint();
-				}
+		ChatServerUI ui = uiMap.computeIfAbsent(value, k -> new ChatServerUI(value));
+        ui.index = index;
+        ui.selected = isSelected;
+        ui.hasFocus = cellHasFocus;
+        ui.parentList = (JList<ChatServer>)list;
+        curUI = ui;
 
-				@Override
-				public void onStatsChanged(ChatServer server) { }
-			});
-		}
-		return this;
+        return this;
 	}
 
 	@Override
 	public void paint(Graphics g) {
 		super.paint(g);
-		if(this.chatServer == null)
+		if(curUI == null || curUI.chatServer == null)
 			return;
 		int w = getWidth();
 		int h = getHeight();
-		Font font = this.parentList.getFont();
-		if(this.selected) {
-			g.setColor(this.parentList.getSelectionBackground());
+		Font font = curUI.parentList.getFont();
+		if(curUI.selected) {
+			g.setColor(curUI.parentList.getSelectionBackground());
 			g.fillRect(0, 0, w, h);
 		}
-		if(!chatServer.isEnabled()) {
-			g.drawImage(imgDisabled, 0, 0, imgDisabled.getWidth(), imgDisabled.getHeight(), null);
-		} else {
-			if(!curImage.equals(imgSnooze))
-				if(System.currentTimeMillis() - lastTime >= 1000)
-					curImage = imgSnooze;
-			g.drawImage(curImage, 0, 0, curImage.getWidth(), curImage.getHeight(), null);
-		}
-		g.setColor(this.parentList.getForeground());
+        // Draw image based on currentUI state
+        BufferedImage image = curUI.getCurrentImage();
+        if (image != null) {
+            g.drawImage(image, 0, 0, image.getWidth(), image.getHeight(), null);
+        }
+
+        // Draw text
+        g.setColor(curUI.selected ?
+            curUI.parentList.getSelectionForeground() :
+            curUI.parentList.getForeground());
 		g.setFont(font);
-		g.drawString(this.chatServer.getName(), imgSnooze.getWidth()+5, font.getSize()+10);
-		g.drawString(this.chatServer.getChatClient().getChatBotClient().getRiaFileName(), imgSnooze.getWidth()+5, h - (font.getSize()+5));
-		if(this.hasFocus) {
-			g.setColor(this.parentList.getSelectionForeground());
-			g.drawRect(0, 0, w-1, h-1);
-		}
+        int textX = image != null ? image.getWidth() + 5 : 5;
+        g.drawString(curUI.chatServer.getName(), textX, font.getSize() + 10);
+        g.drawString(curUI.chatServer.getChatClient().getChatBotClient().getRiaFileName(),
+                    textX, h - (font.getSize() + 5));
+
+        if (curUI.hasFocus) {
+            g.setColor(curUI.parentList.getSelectionForeground());
+            g.drawRect(0, 0, w-1, h-1);
+        }
 	}
+
+	///////////////////////////////////////////////////////////////////////////////
+	/// ChatServer JList UI state
+	///////////////////////////////////////////////////////////////////////////////
+	private static class ChatServerUI {
+        int index = -1;
+        boolean selected = false;
+        boolean hasFocus = false;
+        JList<ChatServer> parentList = null;
+        long lastTime = 0;
+        final ChatServer chatServer; // Make final
+        BufferedImage curImage = imgSnooze;
+
+        // Listener for this specific UI instance
+        private final ChatServerListener listener;
+
+        /**
+         * Constructor
+         * @param server ChatServer instance
+         */
+        public ChatServerUI(ChatServer server) {
+            this.chatServer = server;
+            this.listener = createListener();
+            this.chatServer.addChatServerListener(this.listener);
+        }
+
+        /**
+         * Create listener instance
+         * @return ChatServerListener instance
+         */
+        private ChatServerListener createListener() {
+            return new ChatServerListener() {
+                @Override
+                public void onActivityStateChanged(ChatServer server, ChatSessionState state) {
+                    if (server.equals(chatServer)) {
+                        switch(state) {
+                            case CHATBOT: curImage = imgChatBot; break;
+                            case AIMODEL: curImage = imgAi;      break;
+                            case AGENT:   curImage = imgAgent;   break;
+                            case WEBSITE: curImage = imgWebsite; break;
+                        }
+                        lastTime = System.currentTimeMillis();
+                        // Trigger repaint through parent list
+                        if (parentList != null) {
+                            parentList.repaint();
+                        }
+                    }
+                }
+
+                @Override
+                public void onStatsChanged(ChatServer server) { }
+            };
+        }
+
+        /**
+         * Get current image depending on current state
+         * @return BufferedImage instance
+         */
+        public BufferedImage getCurrentImage() {
+            if (!chatServer.isEnabled()) {
+                return imgDisabled;
+            }
+
+            // Auto-reset to snooze
+            if (!curImage.equals(imgSnooze) &&
+                System.currentTimeMillis() - lastTime >= 1000) {
+                curImage = imgSnooze;
+            }
+
+            return curImage;
+        }
+    }
 }

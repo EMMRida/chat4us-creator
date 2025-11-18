@@ -157,33 +157,34 @@ public class Settings {
 		try(BufferedReader br = new BufferedReader(new FileReader(SETTINGS_FILE))) {
 			Settings st = new Settings();
 			String line;
+			String[] items;
 			while ((line = br.readLine()) != null) {
 				if (line.startsWith("openedRecently=")) { //$NON-NLS-1$
-					String[] items = line.substring(15).trim().split(SPLIT_CHARS_R);
+					items = line.substring(15).trim().split(SPLIT_CHARS_R);
 					for (int i = 0; i < items.length; i++)
 						st.openedRecently.add(items[i]);
 				} else if (line.startsWith("mainWndPos=")) { //$NON-NLS-1$
-					String[] items = line.substring(11).trim().split(","); //$NON-NLS-1$
+					items = line.substring(11).trim().split(","); //$NON-NLS-1$
 					st.setMainWndPos(new Point(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("mainWndSize=")) { //$NON-NLS-1$
-					String[] items = line.substring(12).trim().split(","); //$NON-NLS-1$
+					items = line.substring(12).trim().split(","); //$NON-NLS-1$
 					st.setMainWndSize(new Dimension(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("mainWndState=")) { //$NON-NLS-1$
 					st.setMainWndState(Integer.parseInt(line.substring(13).trim()));
 				} else if (line.startsWith("dlgChatBotPos=")) { //$NON-NLS-1$
-					String[] items = line.substring(14).trim().split(","); //$NON-NLS-1$
+					items = line.substring(14).trim().split(","); //$NON-NLS-1$
 					st.setDlgChatBotPos(new Point(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("dlgChatBotSize=")) { //$NON-NLS-1$
-					String[] items = line.substring(15).trim().split(","); //$NON-NLS-1$
+					items = line.substring(15).trim().split(","); //$NON-NLS-1$
 					st.setDlgChatBotSize(new Dimension(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("mainWndSplitPos=")) { //$NON-NLS-1$
-					String[] items = line.substring(16).trim().split(","); //$NON-NLS-1$
+					items = line.substring(16).trim().split(","); //$NON-NLS-1$
 					st.setMainWndSplitPos(new Point(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("dlgRouteItemPos=")) { //$NON-NLS-1$
-					String[] items = line.substring(16).trim().split(","); //$NON-NLS-1$
+					items = line.substring(16).trim().split(","); //$NON-NLS-1$
 					st.setDlgRouteItemPos(new Point(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("dlgRouteItemSize=")) { //$NON-NLS-1$
-					String[] items = line.substring(17).trim().split(","); //$NON-NLS-1$
+					items = line.substring(17).trim().split(","); //$NON-NLS-1$
 					st.setDlgRouteItemSize(new Dimension(Integer.parseInt(items[0]), Integer.parseInt(items[1])));
 				} else if (line.startsWith("maxRecentFiles=")) { //$NON-NLS-1$
 					st.setMaxRecentFiles(Integer.parseInt(line.substring(15).trim()));

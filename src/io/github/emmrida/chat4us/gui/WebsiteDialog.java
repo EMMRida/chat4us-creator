@@ -421,12 +421,14 @@ public class WebsiteDialog extends JDialog {
 						if(Helper.isValidIP(tfDomain.getText()) || Helper.isValidURL(tfDomain.getText())) {
 							if(Helper.isValidIP(tfIP.getText())) {
 								if(tfKey1.getText().length() >= 8 && tfKey2.getText().length() >= 8) {
-									int ret = JOptionPane.showConfirmDialog(WebsiteDialog.this, String.format(Messages.getString("WebsiteDialog.MB_ALTER_SITE_MSG"), (edited? Messages.getString("WebsiteDialog.MB_ALTER_SITE_EDIT") : Messages.getString("WebsiteDialog.MB_ALTER_SITE_ADD"))), Messages.getString("WebsiteDialog.MB_ALTER_SITE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-									if(ret == JOptionPane.YES_OPTION) {
-										canceled = false;
-										WebsiteDialog.this.setVisible(false);
+									if(cmbAIGroup.getSelectedIndex() >= 0) {
+										int ret = JOptionPane.showConfirmDialog(WebsiteDialog.this, String.format(Messages.getString("WebsiteDialog.MB_ALTER_SITE_MSG"), (edited? Messages.getString("WebsiteDialog.MB_ALTER_SITE_EDIT") : Messages.getString("WebsiteDialog.MB_ALTER_SITE_ADD"))), Messages.getString("WebsiteDialog.MB_ALTER_SITE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+										if(ret == JOptionPane.YES_OPTION) {
+											canceled = false;
+											WebsiteDialog.this.setVisible(false);
+										}
+										return;
 									}
-									return;
 								}
 							}
 						}

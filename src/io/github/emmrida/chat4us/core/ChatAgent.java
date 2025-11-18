@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
 import com.google.gson.Gson;
 
 import io.github.emmrida.chat4us.gui.MainWindow;
@@ -63,9 +64,11 @@ public class ChatAgent {
 	 * @return
 	 */
 	private String[] connectToNextAgent(ChatSession ses, int agentStartIndex, int agentEndIndex, Map<String, String> params) {
-		HttpResponse<String> response = null;
+		Object[] agent;
+		HttpResponse<String> response;
+		Map<String, Object> agentResponse;
 		for(int i = agentStartIndex; i < agentEndIndex; i++) {
-			Object[] agent = agents.get(i);
+			agent = agents.get(i);
 			if((int)agent[AG_ENABLED] != 0 && (int)agent[AG_REMOVED] == 0 && (int)agent[AG_AI_GROUP] == ses.getAIGroupId()) {
 				Helper.logInfo(Messages.getString("ChatAgent.LOG_CONNECTING_TO") + agent[AG_NAME] + "@" + agent[AG_HOST] + ":" + agent[AG_PORT] + "..."); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				response = sendHttpRequest("https://" + (String)agent[AG_HOST] + ":" + (String)agent[AG_PORT] + "/letschat", params); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -73,7 +76,7 @@ public class ChatAgent {
 					nextAgentIndex = i + 1;
 					if(nextAgentIndex == agents.size())
 						nextAgentIndex = 0;
-					Map<String, Object> agentResponse = gson.fromJson(response.body(), Map.class);
+					agentResponse = gson.fromJson(response.body(), Map.class);
 					ses.switchToAgentChatSession((int)agent[AG_ID], (String)agent[AG_HOST], Integer.valueOf((String)agent[AG_PORT]), ses.getUserId());
 					Helper.logInfo(String.format(Messages.getString("ChatAgent.AGENT_STARTED_CHAT"), agent[1], ses.getUserId())); //$NON-NLS-1$
 					String msg = (String)agentResponse.get("AGENT_MESSAGE"); //$NON-NLS-1$
@@ -173,10 +176,17 @@ public class ChatAgent {
 		requestBody.deleteCharAt(requestBody.length() - 1);
 
         // Create an HttpClient instance
-        HttpClient client = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .sslContext(new NoopTrustManager().getNoopSSLContext()) // Disables SSL certificate verification
-                .build();
+		HttpClient client;
+		if(MainWindow.isSelfSigned()) {
+	        client = HttpClient.newBuilder()
+	                .version(HttpClient.Version.HTTP_2)
+	                .sslContext(new NoopTrustManager().getNoopSSLContext()) // Disables SSL certificate verification
+	                .build();
+		} else {
+            client = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_2)
+                    .build();
+        }
 
         // Build the HttpRequest
         HttpRequest request = HttpRequest.newBuilder()

@@ -29,6 +29,7 @@ import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,20 +42,23 @@ import java.nio.file.Path;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.SimpleDateFormat;
 import java.text.StringCharacterIterator;
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -75,6 +79,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JEditorPane;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -92,6 +97,7 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.html.HTMLEditorKit;
 
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -174,13 +180,14 @@ public class Helper {
             }
 
             // Build compressed string
+            String group;
             for (int i = 0; i < groups.length; i++) {
                 if (i == maxStart && maxLength > 1) {
                     compressed.append("::"); //$NON-NLS-1$
                     i += maxLength - 1;
                 } else {
                     // Remove leading zeros
-                    String group = groups[i].replaceFirst("^0+(?!$)", ""); //$NON-NLS-1$ //$NON-NLS-2$
+                    group = groups[i].replaceFirst("^0+(?!$)", ""); //$NON-NLS-1$ //$NON-NLS-2$
                     compressed.append(group);
                     if (i < groups.length - 1 && !(i == maxStart - 1 && maxLength > 1)) {
                         compressed.append(":"); //$NON-NLS-1$
@@ -269,6 +276,9 @@ public class Helper {
             List<String> pathElements = Arrays.asList(path.split("/")); //$NON-NLS-1$
 
             // Traverse the JSON structure
+            int index;
+            JsonObject jsonObject;
+            JsonArray jsonArray;
             JsonElement currentElement = rootElement;
             for (String pathElement : pathElements) {
                 if (currentElement == null || currentElement.isJsonNull()) {
@@ -276,12 +286,12 @@ public class Helper {
                 }
 
                 if (currentElement.isJsonObject()) {
-                    JsonObject jsonObject = currentElement.getAsJsonObject();
+                    jsonObject = currentElement.getAsJsonObject();
                     currentElement = jsonObject.get(pathElement);
                 } else if (currentElement.isJsonArray()) {
-                    JsonArray jsonArray = currentElement.getAsJsonArray();
+                    jsonArray = currentElement.getAsJsonArray();
                     try {
-                        int index = Integer.parseInt(pathElement);
+                        index = Integer.parseInt(pathElement);
                         if (index >= 0 && index < jsonArray.size()) {
                             currentElement = jsonArray.get(index);
                         } else {
@@ -348,11 +358,12 @@ public class Helper {
      * @throws SQLException
      */
     public static List<String> getNonSystemTables(Connection connection) throws SQLException {
+    	String tableName;
         List<String> tableNames = new ArrayList<>();
         DatabaseMetaData metaData = connection.getMetaData();
         ResultSet tables = metaData.getTables(null, null, "%", new String[]{"TABLE"}); //$NON-NLS-1$ //$NON-NLS-2$
         while (tables.next()) {
-            String tableName = tables.getString("TABLE_NAME"); //$NON-NLS-1$
+            tableName = tables.getString("TABLE_NAME"); //$NON-NLS-1$
             // Exclude SQLite system tables (usually start with "sqlite_")
             if (!tableName.startsWith("sqlite_")) //$NON-NLS-1$
                 tableNames.add(tableName);
@@ -720,6 +731,31 @@ public class Helper {
     }
 
     /**
+    *
+    * @param keystorePath
+    * @param password
+    * @return
+    * @throws Exception
+    */
+   public static boolean isSelfSigned(char[] pswd) throws Exception {
+	    KeyStore keystore = KeyStore.getInstance("PKCS12"); //$NON-NLS-1$
+	    try (FileInputStream fis = new FileInputStream(CertGenDialog.KEYSTORE_PFX)) {
+	        keystore.load(fis, pswd);
+	    }
+
+	    // Get the first (and only) alias
+	    String alias = keystore.aliases().nextElement();
+	    X509Certificate cert = (X509Certificate) keystore.getCertificate(alias);
+
+	    try {
+	        cert.verify(cert.getPublicKey());
+	        return true;
+	    } catch (Exception ignored) {
+	        return false;
+	    }
+   }
+
+    /**
      * Generate a random salt.
      * @param length Length of the salt.
      * @return Generated salt.
@@ -797,11 +833,14 @@ public class Helper {
     public static Map<String, String> parsePostData(String body) {
         Map<String, String> params = new HashMap<>();
         if (!body.isEmpty()) {
+        	String[] keyValue;
+        	String key;
+        	String value;
             String[] pairs = body.split("&"); //$NON-NLS-1$
             for (String pair : pairs) {
-                String[] keyValue = pair.split("=", 2); // Split into key and value //$NON-NLS-1$
-                String key = urlDecode(keyValue[0]);
-                String value = keyValue.length > 1 ? urlDecode(keyValue[1]) : ""; // Value may be empty //$NON-NLS-1$
+                keyValue = pair.split("=", 2); // Split into key and value //$NON-NLS-1$
+                key = urlDecode(keyValue[0]);
+                value = keyValue.length > 1 ? urlDecode(keyValue[1]) : ""; // Value may be empty //$NON-NLS-1$
                 params.put(key, value);
             }
         }
@@ -831,12 +870,13 @@ public class Helper {
 	public static List<Object[]> loadTable(Connection con, String tblName) {
 		List<Object[]> list = null;
 		try {
+			Object[] row;
 			PreparedStatement stmt = con.prepareStatement("SELECT * FROM " + tblName); //$NON-NLS-1$
 			ResultSet rs = stmt.executeQuery();
 			int rows = rs.getMetaData().getColumnCount();
 			list = new ArrayList<>();
 			while(rs.next()) {
-				Object[] row = new Object[rows];
+				row = new Object[rows];
 				for(int i = 0; i < row.length; i++)
 					row[i] = rs.getObject(i + 1);
 				list.add(row);
@@ -870,14 +910,16 @@ public class Helper {
 	 * @return List of rows
 	 */
 	public static List<Object[]> dbQuery(Connection con, String sql) {
+		int nRows;
+		Object[] row;
 		List<Object[]> rows = new ArrayList<>();
 		try(Statement st = con.createStatement()) {
 			ResultSet rs = st.executeQuery(sql);
 			while(rs.next()) {
 				if(rows == null)
 					rows = new ArrayList<>();
-				int nRows = rs.getMetaData().getColumnCount();
-				Object[] row = new Object[nRows];
+				nRows = rs.getMetaData().getColumnCount();
+				row = new Object[nRows];
 				for(int i = 0; i < row.length; i++)
 					row[i] = rs.getObject(i + 1);
 				rows.add(row);
@@ -1154,16 +1196,44 @@ public class Helper {
     }
 
 	/**
+	 * Sets up the editor pane
+	 * @param editorPane The editor pane
+	 */
+	public static void setupEditorPane(JEditorPane editorPane) {
+		editorPane.setContentType("text/html"); //$NON-NLS-1$
+		editorPane.setEditorKit(new HTMLEditorKit());
+	}
+
+	/**
+	 * Gets the local time
+	 * @return The local time
+	 */
+	public static String getLocalTime() {
+		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm"); //$NON-NLS-1$
+		return sdf.format(new Date());
+	}
+
+	/**
+	 * Gets the local time
+	 * @param time The time
+	 * @return The local time
+	 */
+	public static String getLocalTime(long time) {
+		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm"); //$NON-NLS-1$
+		return sdf.format(new Date(time));
+	}
+
+	/**
 	 * Get the local date time from the given date string using the given format
 	 * @param dateString The date string
 	 * @param format The format to use
 	 * @return The local date time
 	 */
-	public static LocalDateTime toLocalDateTime(String dateString, String format) {
+	public static LocalDate toLocalDate(String dateString, String format) {
         Objects.requireNonNull(dateString);
         Objects.requireNonNull(format);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format);
-        return LocalDateTime.parse(dateString, formatter);
+        return LocalDate.parse(dateString, formatter);
 	}
 
 	/**
@@ -1255,8 +1325,9 @@ public class Helper {
 	 * @return The node with the given name, null on error.
 	 */
     public static Node getNodeByName(NodeList nodeList, String nodeName) {
+    	Node node;
         for (int i = 0; i < nodeList.getLength(); i++) {
-            Node node = nodeList.item(i);
+            node = nodeList.item(i);
             if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(nodeName)) {
                 return node;
             }

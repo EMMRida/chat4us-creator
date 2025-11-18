@@ -28,6 +28,7 @@ import io.github.emmrida.chat4us.core.ChatServer.AiServer;
 import io.github.emmrida.chat4us.core.ChatServer.ChatServerListener;
 import io.github.emmrida.chat4us.core.ChatSession.ChatSessionState;
 import io.github.emmrida.chat4us.core.IChatModelClient;
+import io.github.emmrida.chat4us.internalclient.InternalClientFrame;
 import io.github.emmrida.chat4us.ria.NodePanel;
 import io.github.emmrida.chat4us.ria.RiaEditorPanel;
 import io.github.emmrida.chat4us.util.Helper;
@@ -73,6 +74,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -93,7 +95,6 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 
-import javax.swing.JSeparator;
 import javax.swing.event.MenuListener;
 import javax.swing.event.MenuEvent;
 import javax.swing.JEditorPane;
@@ -112,12 +113,13 @@ import java.awt.event.InputEvent;
  * @author El Mhadder Mohamed Rida
  */
 public class MainWindow {
-	public static final String CHATBOTS_ROOT_FOLDER = "./chatbots"; //$NON-NLS-1 //$NON-NLS-1$ //$NON-NLS-1$ //$NON-NLS-1$
+	public static final String CHATBOTS_ROOT_FOLDER = "./chatbots"; //$NON-NLS-1$
 
 	private static JFrame mainFrame;
 	private static MainWindow mainWindow;
 	private static Settings settings;
 	private static BufferedImage imgBkg = null;
+	private static boolean selfSigned = false;
 
 	private boolean dbOptimize = false;
 	private Connection conChat4Us;
@@ -182,11 +184,9 @@ public class MainWindow {
 	private JMenuItem mnuCleanChatFiles;
 	private JLabel lblChatsIcon;
 	private JLabel lblChatsCount;
-	private JSeparator separator_6;
 	private JLabel lblStatusText;
 	private JMenuItem mnuCleanDatabase;
 	private JMenu mnNewMenu_6;
-	private JSeparator separator_7;
 	private JMenuItem mnuCertImport;
 	private JMenuItem mnuOpenGuide;
 	private JMenuItem mnuSettings;
@@ -196,6 +196,9 @@ public class MainWindow {
 	private JMenuItem mnuGetStarted;
 	private JMenuItem mnuCheck4Updates;
 	private JMenuItem mnuContribute;
+	private JMenuItem mnuInternalChatClient;
+	private JMenuItem mnuOpenInEditor;
+	private JMenuItem mnuServerRestart;
 
 	/**
 	 * Gets the main frame.
@@ -240,6 +243,8 @@ public class MainWindow {
 	public static void setStatusText(String text) { if(text != null) mainWindow.lblStatusText.setText(text); }
 
 	public static TrayIcon getTrayIcon() { return mainWindow.trayIcon; }
+
+	public static boolean isSelfSigned() { return selfSigned; }
 
 	/**
 	 * Show log message in the log window and append it to the log file.
@@ -341,10 +346,12 @@ public class MainWindow {
 	 * @param index the index of the tab to close
 	 */
 	public void closeRouteEditorTab(int index) {
+		JScrollPane sp;
+        RiaEditorPanel editor;
 		tabbedPaneRight.removeTabAt(index);
 		for(int i = 0; i < tabbedPaneRight.getTabCount(); i++) {
-			JScrollPane sp = (JScrollPane)tabbedPaneRight.getComponentAt(i);
-			RiaEditorPanel editor = (RiaEditorPanel)sp.getViewport().getView();
+			sp = (JScrollPane)tabbedPaneRight.getComponentAt(i);
+			editor = (RiaEditorPanel)sp.getViewport().getView();
 			editor.setTabIndex(i);
 		}
 		SwingUtilities.invokeLater(() -> {
@@ -506,11 +513,13 @@ public class MainWindow {
 			ps.setInt(n++, dlg.getDbId());
 			n = ps.executeUpdate();
 			if(n == 1) {
+				IdLabelComboElement el;
+				IdLabelComboElement old;
 				IdLabelComboModel model = (IdLabelComboModel)lstWebsites.getModel();
 				for(int i = 0; i < model.getSize(); i++) {
-					IdLabelComboElement el = (IdLabelComboElement)model.getElementAt(i);
+					el = (IdLabelComboElement)model.getElementAt(i);
 					if(el.getId() == dlg.getDbId()) {
-						IdLabelComboElement old = model.getElementAt(i);
+						old = model.getElementAt(i);
 						model.replaceElement(old, new IdLabelComboElement(el.getId(), domain, true));
 						break;
 					}
@@ -530,9 +539,11 @@ public class MainWindow {
 		int cid = 0;
 		String host = dlg.getHostIp();
 		int port = dlg.getHostPort();
+		int aics = dlg.getAiContextSize();
+		ChatServer cs;
 		ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
 		for(int i = 0; i < model.getSize(); i++) {
-			ChatServer cs = model.getElementAt(i);
+			cs = model.getElementAt(i);
 			if(cs.getHost().equals(host) && cs.getPort() == port) {
 				JOptionPane.showMessageDialog(mainFrame, Messages.getString("MainWindow.SERVER_ALREADY_EXISTS")); //$NON-NLS-1$
 				return;
@@ -541,7 +552,7 @@ public class MainWindow {
 		int gid = dlg.getAIGroup();
 		String ria = dlg.getRiaFile();
 		String desc = dlg.getDescription();
-		String qcs = "INSERT INTO chatbots (ai_group_id, server_ip, server_port, ria_file, description, enabled, removed) VALUES(?, ?, ?, ?, ?, ?, ?);"; //$NON-NLS-1$
+		String qcs = "INSERT INTO chatbots (ai_group_id, server_ip, server_port, ria_file, description, enabled, removed, ai_context_size) VALUES(?, ?, ?, ?, ?, ?, ?, ?);"; //$NON-NLS-1$
 		String qai = "INSERT INTO ai_servers (chatbot_id, url, enabled, removed) VALUES(?, ?, ?, ?);"; //$NON-NLS-1$
 		try {
 			conChat4Us.setAutoCommit(false);
@@ -553,6 +564,7 @@ public class MainWindow {
 				pst.setString(5, desc);
 				pst.setInt(6, 1);
 				pst.setInt(7, 0);
+                pst.setInt(8, aics);
 				if(pst.executeUpdate() == 1) {
 					ResultSet rs = pst.getGeneratedKeys();
 					if(rs.next()) {
@@ -596,7 +608,7 @@ public class MainWindow {
 		}
 		if(cid > 0) {
 			try {
-				ChatServer cs = new ChatServer(cid, host, port, gid, aiServers);
+				cs = new ChatServer(cid, host, port, gid, aics, aiServers);
 				cs.setDescription(desc);
 				ChatClient cc = cs.getChatClient();
 				cc.loadChatBotRIA(ria);
@@ -628,9 +640,14 @@ public class MainWindow {
 			aadlg.dispose();
 			return;
 		}
-		if(!Helper.checkKeystorePassword(aadlg.getPassword()))
+		char[] pswd = aadlg.getPassword();
+		if(!Helper.checkKeystorePassword(pswd)) {
+            aadlg.dispose();
 			return;
-		String uqcs = "UPDATE chatbots SET ai_group_id=?, server_ip=?, server_port=?, ria_file=?, description=?, enabled=? WHERE id=?;"; //$NON-NLS-1$
+		}
+		aadlg.dispose();
+
+		String uqcs = "UPDATE chatbots SET ai_group_id=?, server_ip=?, server_port=?, ria_file=?, description=?, enabled=?, ai_context_size=? WHERE id=?;"; //$NON-NLS-1$
 		String uqai = "UPDATE ai_servers SET url=?, enabled=? WHERE id=?;"; //$NON-NLS-1$
 		String sqai = "UPDATE ai_servers SET removed=? WHERE id=?;"; //$NON-NLS-1$
 		String iqai = "INSERT INTO ai_servers (chatbot_id, url, enabled, removed) VALUES(?, ?, ?, ?);"; //$NON-NLS-1$
@@ -640,6 +657,7 @@ public class MainWindow {
 			String host = dlg.getHostIp();
 			int port = dlg.getHostPort();
 			int gid = dlg.getAIGroup();
+			int aics = dlg.getAiContextSize();
 			String ria = dlg.getRiaFile();
 			String desc = dlg.getDescription();
 			try {
@@ -651,11 +669,15 @@ public class MainWindow {
 					pst.setString(4, ria);
 					pst.setString(5, desc);
 					pst.setInt(6, cs.isEnabled() ? 1 : 0);
-					pst.setInt(7, cid);
+                    pst.setInt(7, aics);
+					pst.setInt(8, cid);
 					if(pst.executeUpdate() == 1) {
 						try {
+							Object[] aid;
+							Object[] ais;
+							ResultSet rs;
 							for(int i = 0; i < dlg.getAiServersCount(); i++) {
-								Object[] ais = dlg.getAiServerRow(i);
+								ais = dlg.getAiServerRow(i);
 								if(ais != null) {
 									int id = (Integer)ais[0];
 									if(id > 0) {
@@ -666,7 +688,7 @@ public class MainWindow {
 											if(pst1.executeUpdate() != 1) {
 												Helper.logWarning(String.format(Messages.getString("MainWindow.AI_URL_EDIT_FAILURE"), (String)ais[1]), true); //$NON-NLS-1$
 											} else {
-												Object[] aid = getAIServerById(id);
+												aid = getAIServerById(id);
 												if(aid != null) {
 													aid[1] = cid;
 													aid[2] = (String)ais[1];
@@ -680,14 +702,14 @@ public class MainWindow {
 										}
 									} else {
 										try(PreparedStatement pst1 = conChat4Us.prepareStatement(iqai, Statement.RETURN_GENERATED_KEYS)) {
-											pst1.setInt(1,   cid);
+											pst1.setInt(1, cid);
 											pst1.setString(2, (String)ais[1]);
-											pst1.setInt(3,   (Integer)ais[2]);
-											pst1.setInt(4,   0);
+											pst1.setInt(3, (Integer)ais[2]);
+											pst1.setInt(4, 0);
 											if(pst1.executeUpdate() != 1) {
 												Helper.logWarning(String.format(Messages.getString("MainWindow.AI_URL_ADD_FAILURE"), (String)ais[1]), true); //$NON-NLS-1$
 											} else {
-												ResultSet rs = pst1.getGeneratedKeys();
+												rs = pst1.getGeneratedKeys();
 												if(rs.next()) {
 													int nid = rs.getInt(1);
 													aiServers.add(new Object[] { nid, cid, (String)ais[1], (Integer)ais[2], 0 });
@@ -711,15 +733,17 @@ public class MainWindow {
 						List<Integer> remIds = dlg.getRemovedIds();
 						if(remIds.size() > 0) {
 							try(PreparedStatement pst1 = conChat4Us.prepareStatement(sqai)) {
+								int id;
+								Object[] ais;
 								for(int i = 0; i < remIds.size(); i++) {
-									int id = remIds.get(i);
+									id = remIds.get(i);
 									if(id > 0) {
 										pst1.setInt(1, 1);
 										pst1.setInt(2, id);
 										if(pst1.executeUpdate() != 1) {
 											Helper.logWarning(String.format(Messages.getString("MainWindow.AI_URL_NOT_REMOVED"), id), true); //$NON-NLS-1$
 										} else {
-											Object[] ais = getAIServerById(id);
+											ais = getAIServerById(id);
 											if(ais != null)
 												ais[4] = 1;
 										}
@@ -747,15 +771,14 @@ public class MainWindow {
 			// Update/Replace edited ChatServer
 			try {
 				ChatServer old = cs;
-				cs = new ChatServer(cid, host, port, gid, aiServers);
+				cs = new ChatServer(cid, host, port, gid, aics, aiServers);
 				cs.setDescription(desc);
 				ChatClient cc = cs.getChatClient();
 				cc.loadChatBotRIA(ria);
 				old.setEnabled(false);
 				old.stopServer();
 				cs.loadChatModelClients(aiServers);
-				cs.startSecureServer(aadlg.getPassword());
-				aadlg.dispose();
+				cs.startSecureServer(pswd);
 				ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
 				model.replaceElement(old, cs);
 				cs.addChatServerListener(new ChatServerListener() {
@@ -769,6 +792,7 @@ public class MainWindow {
 			} catch (Exception ex) {
 				Helper.logError(ex, String.format(Messages.getString("MainWindow.SERVER_RECREATION_ERROR"), host, port), true); //$NON-NLS-1$
 			}
+			Arrays.fill(pswd, (char)0);
 		} else {
 			Helper.logError(Messages.getString("MainWindow.NULL_SERVER_EDIT_ERROR")); //$NON-NLS-1$
 			return;
@@ -782,11 +806,12 @@ public class MainWindow {
 	 */
 	private void updateServerState(ChatServer server) {
 		int nChats = 0;
+		ChatServer s;
 		Set<Integer> cids = new HashSet<Integer>();
 		Set<Integer> aids = new HashSet<Integer>();
 		ListModel<ChatServer> model = this.lstChatBots.getModel();
 		for(int i = 0; i < model.getSize(); i++) {
-			ChatServer s = model.getElementAt(i);
+			s = model.getElementAt(i);
 			cids.addAll(s.getConnectedClients());
 			aids.addAll(s.getConnectedAgents());
 			nChats += s.getActiveChatsCount();
@@ -860,9 +885,10 @@ public class MainWindow {
 			ps.setInt(7, id);
 			int n = ps.executeUpdate();
 			if(n == 1) {
+				IdLabelComboElement agent;
 				IdLabelComboModel model = (IdLabelComboModel)lstAgents.getModel();
 				for(int i = 0; i < model.getSize(); i++) {
-					IdLabelComboElement agent = model.getElementAt(i);
+					agent = model.getElementAt(i);
 					if(agent.getId() == id) {
 						model.replaceElement(agent, new IdLabelComboElement(id, name, true));
 						break;
@@ -888,61 +914,60 @@ public class MainWindow {
 				if(r != null)
 					index = r.contains(e.getPoint()) ? index : -1;
 			}
-			IdLabelComboElement agent = index != -1 ? lst.getSelectedValue() : null;
-			if(agent != null) {
-				if(lstSelAgentPopup == null) {
-					lstSelAgentPopup = new JPopupMenu();
-					JCheckBoxMenuItem mnuEnabled = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_ACTIVATE")); //$NON-NLS-1$
-					mnuEnabled.addActionListener(ev -> {
-						IdLabelComboElement ag = lstAgents.getSelectedValue();
-						if(ag != null) {
-							menuAgentDeActivate(ag);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelAgentPopup.add(mnuEnabled);
-					lstSelAgentPopup.addSeparator();
-					JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
-					mnuEdit.addActionListener(ev -> {
-						IdLabelComboElement ag = lstAgents.getSelectedValue();
-						if(ag != null) {
-							menuAgentEdit(ag);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelAgentPopup.add(mnuEdit);
-					JMenuItem mnuDelete = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
-					mnuDelete.addActionListener(ev -> {
-						IdLabelComboElement ag = lstAgents.getSelectedValue();
-						if(ag != null) {
-							menuAgentRemove(ag);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelAgentPopup.add(mnuDelete);
-					lstSelAgentPopup.addPopupMenuListener(new PopupMenuListener() {
-						@Override
-						public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-							IdLabelComboElement ag = lstAgents.getSelectedValue();
-							if(ag != null) {
-								mnuEnabled.setText(ag.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
-								mnuEnabled.setSelected(ag.isEnabled());
-							} else Toolkit.getDefaultToolkit().beep();
-						}
-						@Override
-						public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
-						@Override
-						public void popupMenuCanceled(PopupMenuEvent e) { }
-					});
-				}
-				lstSelAgentPopup.show(e.getComponent(), e.getX(), e.getY());
-			} else { // Click on empty area
-				if(lstNoSelAgentPopup == null) {
-					lstNoSelAgentPopup = new JPopupMenu();
-					JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
-					mnuAdd.addActionListener(ev -> {
-						menuAgentNew();
-					});
-					lstNoSelAgentPopup.add(mnuAdd);
-				}
+			if(index != -1) {
+				lst.setSelectedIndex(index);
+			} else if(lstNoSelAgentPopup != null)
 				lstNoSelAgentPopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstSelAgentPopup == null) {
+				lstSelAgentPopup = new JPopupMenu();
+				JCheckBoxMenuItem mnuEnabled = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_ACTIVATE")); //$NON-NLS-1$
+				mnuEnabled.addActionListener(ev -> {
+					IdLabelComboElement agent = lst.getSelectedValue();
+					if(agent != null)
+						menuAgentDeActivate(agent);
+				});
+				lstSelAgentPopup.add(mnuEnabled);
+				lstSelAgentPopup.addSeparator();
+				JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
+				mnuEdit.addActionListener(ev -> {
+					IdLabelComboElement agent = lst.getSelectedValue();
+					if(agent != null)
+						menuAgentEdit(agent);
+				});
+				lstSelAgentPopup.add(mnuEdit);
+				JMenuItem mnuDelete = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
+				mnuDelete.addActionListener(ev -> {
+					IdLabelComboElement agent = lst.getSelectedValue();
+					if(agent != null)
+						menuAgentRemove(agent);
+				});
+				lstSelAgentPopup.add(mnuDelete);
+				lstSelAgentPopup.addPopupMenuListener(new PopupMenuListener() {
+					@Override
+					public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+						IdLabelComboElement agent = lst.getSelectedValue();
+						if(agent != null) {
+							mnuEnabled.setText(agent.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
+							mnuEnabled.setSelected(agent.isEnabled());
+						}
+					}
+					@Override
+					public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
+					@Override
+					public void popupMenuCanceled(PopupMenuEvent e) { }
+				});
+			}
+			if(index != -1)
+				lstSelAgentPopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstNoSelAgentPopup == null) {
+				lstNoSelAgentPopup = new JPopupMenu();
+				JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
+				mnuAdd.addActionListener(ev -> {
+					menuAgentNew();
+				});
+				lstNoSelAgentPopup.add(mnuAdd);
 			}
 		}
 	}
@@ -965,7 +990,7 @@ public class MainWindow {
 	 * @param agent the agent record
 	 */
 	private void menuAgentRemove(IdLabelComboElement agent) {
-		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_AGENT_DELETE_MSG"), agent.getLabel()), Messages.getString("MainWindow.MB_AGENT_DELETE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_AGENT_DELETE_MSG"), agent.getLabel()), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 		if(ret == JOptionPane.YES_OPTION) {
 			int n = Helper.dbUpdate(conChat4Us, "UPDATE agents SET removed = 1 WHERE id = " + agent.getId() + ";"); //$NON-NLS-1$ //$NON-NLS-2$
 			if(n == 1) {
@@ -995,7 +1020,7 @@ public class MainWindow {
 	 * @param agent the agent record
 	 */
 	private void menuAgentDeActivate(IdLabelComboElement agent) {
-		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_AGENT_REMOVE_MSG"), (agent.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), agent.getLabel()), Messages.getString("MainWindow.MB_AGENT_REMOVE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_AGENT_REMOVE_MSG"), (agent.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), agent.getLabel()), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		if(ret == JOptionPane.YES_OPTION) {
 			int n = Helper.dbUpdate(conChat4Us, "UPDATE agents SET enabled = " + (agent.isEnabled() ? 0 : 1) + " WHERE id = " + agent.getId() + ";"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			if(n == 1) {
@@ -1029,62 +1054,62 @@ public class MainWindow {
 				if(r != null)
 					index = r.contains(e.getPoint()) ? index : -1;
 			}
-			IdLabelComboElement webSites = index != -1 ? lst.getSelectedValue() : null;
-			if(webSites != null) {
-				if(lstSelWebsitePopup == null) {
-					lstSelWebsitePopup = new JPopupMenu();
-					JCheckBoxMenuItem mnuEnabled = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_ACTIVATE")); //$NON-NLS-1$
-					mnuEnabled.addActionListener(ev -> {
-						IdLabelComboElement webs = lstWebsites.getSelectedValue();
-						if(webs != null) {
-							menuWebsiteDeactivate(webs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelWebsitePopup.add(mnuEnabled);
-					lstSelWebsitePopup.addSeparator();
-					JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
-					mnuEdit.addActionListener(ev -> {
-						IdLabelComboElement webs = lstWebsites.getSelectedValue();
-						if(webs != null) {
-							menuWebsiteEdit(webs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelWebsitePopup.add(mnuEdit);
-					JMenuItem mnuRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
-					mnuRemove.addActionListener(ev -> {
-						IdLabelComboElement webs = lstWebsites.getSelectedValue();
-						if(webs != null) {
-							menuWebsiteRemove(webs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelWebsitePopup.add(mnuRemove);
-					lstSelWebsitePopup.addPopupMenuListener(new PopupMenuListener() {
-						@Override
-						public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-							IdLabelComboElement webs = lstWebsites.getSelectedValue();
-							if(webs != null) {
-								mnuEnabled.setText(webs.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
-								mnuEnabled.setSelected(webs.isEnabled());
-							} else Toolkit.getDefaultToolkit().beep();
-						}
-						@Override
-						public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
-						@Override
-						public void popupMenuCanceled(PopupMenuEvent e) { }
-
-					});
-				}
-				lstSelWebsitePopup.show(e.getComponent(), e.getX(), e.getY());
-			} else {
-				if(lstNoSelWebsitePopup == null) {
-					lstNoSelWebsitePopup = new JPopupMenu();
-					JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
-					mnuAdd.addActionListener(ev -> {
-						menuWebsiteNew();
-					});
-					lstNoSelWebsitePopup.add(mnuAdd);
-				}
+			if(index != -1) {
+				lst.setSelectedIndex(index);
+			} else if(lstNoSelWebsitePopup != null)
 				lstNoSelWebsitePopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstSelWebsitePopup == null) {
+				lstSelWebsitePopup = new JPopupMenu();
+				JCheckBoxMenuItem mnuEnabled = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_ACTIVATE")); //$NON-NLS-1$
+				mnuEnabled.addActionListener(ev -> {
+					IdLabelComboElement webSite = lst.getSelectedValue();
+					if(webSite != null)
+						menuWebsiteDeactivate(webSite);
+				});
+				lstSelWebsitePopup.add(mnuEnabled);
+				lstSelWebsitePopup.addSeparator();
+				JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
+				mnuEdit.addActionListener(ev -> {
+					IdLabelComboElement webSite = lst.getSelectedValue();
+					if(webSite != null)
+						menuWebsiteEdit(webSite);
+				});
+				lstSelWebsitePopup.add(mnuEdit);
+				JMenuItem mnuRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
+				mnuRemove.addActionListener(ev -> {
+					IdLabelComboElement webSite = lst.getSelectedValue();
+					if(webSite != null)
+						menuWebsiteRemove(webSite);
+				});
+				lstSelWebsitePopup.add(mnuRemove);
+				lstSelWebsitePopup.addPopupMenuListener(new PopupMenuListener() {
+					@Override
+					public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+						IdLabelComboElement webSite = lst.getSelectedValue();
+						if(webSite != null) {
+							mnuEnabled.setText(webSite.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
+							mnuEnabled.setSelected(webSite.isEnabled());
+						}
+					}
+					@Override
+					public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
+					@Override
+					public void popupMenuCanceled(PopupMenuEvent e) { }
+
+				});
+			}
+
+			if(index != -1)
+				lstSelWebsitePopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstNoSelWebsitePopup == null) {
+				lstNoSelWebsitePopup = new JPopupMenu();
+				JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
+				mnuAdd.addActionListener(ev -> {
+					menuWebsiteNew();
+				});
+				lstNoSelWebsitePopup.add(mnuAdd);
 			}
 		}
 	}
@@ -1108,7 +1133,7 @@ public class MainWindow {
 	 * @param webs the website record
 	 */
 	private void menuWebsiteRemove(IdLabelComboElement webs) {
-		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_WEBSITE_REMOVE_MSG"), webs.getLabel()), Messages.getString("MainWindow.MB_WEBSITE_REMOVE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_WEBSITE_REMOVE_MSG"), webs.getLabel()), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 		if(ret == JOptionPane.YES_OPTION) {
 			int n = Helper.dbUpdate(conChat4Us, "UPDATE websites SET removed = 1 WHERE id = " + webs.getId() + ";"); //$NON-NLS-1$ //$NON-NLS-2$
 			if(n == 1) {
@@ -1140,7 +1165,7 @@ public class MainWindow {
 	 * @param webs the website record.
 	 */
 	private void menuWebsiteDeactivate(IdLabelComboElement webs) {
-		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_DE_ACTIVATE_WEBSITE_MSG"), (webs.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), webs.getLabel()), Messages.getString("MainWindow.MB_DE_ACTIVATE_WEBSITE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		int ret = Helper.showConfirmDialog(MainWindow.getFrame(), String.format(Messages.getString("MainWindow.MB_DE_ACTIVATE_WEBSITE_MSG"), (webs.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), webs.getLabel()), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		if(ret == JOptionPane.YES_OPTION) {
 			int n = Helper.dbUpdate(conChat4Us, "UPDATE websites SET enabled = " + (webs.isEnabled() ? 0 : 1) + " WHERE id = " + webs.getId() + ";"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			if(n == 1) {
@@ -1159,80 +1184,110 @@ public class MainWindow {
 	 */
 	private void lstChatBotsMousePressed(MouseEvent e) {
 		if(e.isPopupTrigger()  || e.getButton() == MouseEvent.BUTTON3) {
-			JList<ChatServer> lst = (JList<ChatServer>)e.getSource();
+			final JList<ChatServer> lst = (JList<ChatServer>)e.getSource();
 			int index = lst.locationToIndex(e.getPoint());
 			if(index != -1) {
 				Rectangle r = lst.getCellBounds(index, index);
 				if(r != null)
 					index = r.contains(e.getPoint()) ? index : -1;
 			}
-			ChatServer chatServer = index != -1 ? lst.getSelectedValue() : null;
-			if(chatServer != null) {
-				if(lstSelBotPopup == null) {
-					lstSelBotPopup = new JPopupMenu();
-					JCheckBoxMenuItem mnuDeActivate = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_DE_ACTIVATE")); //$NON-NLS-1$
-					mnuDeActivate.addActionListener(ev -> {
-						ChatServer cs = lstChatBots.getSelectedValue();
-						if(cs != null) {
-							menuServerDeActivate(cs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelBotPopup.add(mnuDeActivate);
-					lstSelBotPopup.addSeparator();
-					JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
-					mnuEdit.addActionListener(ev -> {
-						ChatServer cs = lstChatBots.getSelectedValue();
-						if(cs != null) {
-							menuServerEdit(cs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelBotPopup.add(mnuEdit);
-					JMenuItem mnuRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
-					mnuRemove.addActionListener(ev -> {
-						ChatServer cs = lstChatBots.getSelectedValue();
-						if(cs != null) {
-							menuServerRemove(cs);
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelBotPopup.add(mnuRemove);
-					JMenu mnuAssistants = new JMenu(Messages.getString("MainWindow.MNU_ASSISTANTS")); //$NON-NLS-1$
-					lstSelBotPopup.add(mnuAssistants);
-					lstSelBotPopup.addSeparator();
-					JMenuItem mnuOpenRia = new JMenuItem(Messages.getString("MainWindow.MNU_OPEN_IN_EDITOR")); //$NON-NLS-1$
-					mnuOpenRia.addActionListener(ev -> {
-						ChatServer cs = lstChatBots.getSelectedValue();
-						if(cs != null) {
-							openRiaDocument(cs.getChatClient().getChatBotClient().getRiaFileName());
-						} else Toolkit.getDefaultToolkit().beep();
-					});
-					lstSelBotPopup.add(mnuOpenRia);
-					lstSelBotPopup.addPopupMenuListener(new PopupMenuListener() {
-						@Override
-						public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-							ChatServer cs = lstChatBots.getSelectedValue();
-							if(cs != null) {
-								mnuDeActivate.setText(cs.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
-								mnuDeActivate.setSelected(cs.isEnabled());
-							} else Toolkit.getDefaultToolkit().beep();
-						}
-						@Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
-						@Override public void popupMenuCanceled(PopupMenuEvent e) { }
-					});
-				}
-				JMenuItem mnuAssistants = (JMenuItem)lstSelBotPopup.getComponent(4);
-				menuServerAddAssistants(chatServer, mnuAssistants);
-				lstSelBotPopup.show(e.getComponent(), e.getX(), e.getY());
-			} else {
-				if(lstNoSelBotPopup == null) {
-					lstNoSelBotPopup = new JPopupMenu();
-					JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
-					mnuAdd.addActionListener(ev -> {
-						menuServerNew();
-					});
-					lstNoSelBotPopup.add(mnuAdd);
-				}
+			if(index != -1) {
+				lst.setSelectedIndex(index);
+			} else if(lstNoSelBotPopup != null)
 				lstNoSelBotPopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstSelBotPopup == null) {
+				lstSelBotPopup = new JPopupMenu();
+				JMenuItem mnuRestart = new JMenuItem(Messages.getString("MainWindow.MNU_RESTART")); //$NON-NLS-1$
+                mnuRestart.addActionListener(ev -> {
+                	ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		menuServerRestart(chatServer);
+				});
+                lstSelBotPopup.add(mnuRestart);
+				JCheckBoxMenuItem mnuDeActivate = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_DE_ACTIVATE")); //$NON-NLS-1$
+				mnuDeActivate.addActionListener(ev -> {
+                	ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		menuServerDeActivate(chatServer);
+				});
+				lstSelBotPopup.add(mnuDeActivate);
+				lstSelBotPopup.addSeparator();
+				JMenuItem mnuEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
+				mnuEdit.addActionListener(ev -> {
+					ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		menuServerEdit(chatServer);
+				});
+				lstSelBotPopup.add(mnuEdit);
+				JMenuItem mnuRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
+				mnuRemove.addActionListener(ev -> {
+					ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		menuServerRemove(chatServer);
+				});
+				lstSelBotPopup.add(mnuRemove);
+				JMenu mnuAssistants = new JMenu(Messages.getString("MainWindow.MNU_ASSISTANTS")); //$NON-NLS-1$
+				lstSelBotPopup.add(mnuAssistants);
+				lstSelBotPopup.addSeparator();
+				JMenuItem mnuOpenRia = new JMenuItem(Messages.getString("MainWindow.MNU_OPEN_IN_EDITOR")); //$NON-NLS-1$
+				mnuOpenRia.addActionListener(ev -> {
+					ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		openRiaDocument(chatServer.getChatClient().getChatBotClient().getRiaFileName());
+				});
+				lstSelBotPopup.add(mnuOpenRia);
+				JMenuItem mnuShowInternalClient = new JMenuItem(Messages.getString("MainWindow.MNU_INTERNAL_CHAT_CLIENT")); //$NON-NLS-1$
+                mnuShowInternalClient.addActionListener(ev -> {
+                	ChatServer chatServer = lst.getSelectedValue();
+                	if(chatServer != null)
+                		showInternalChatClient(chatServer);
+                });
+                lstSelBotPopup.add(mnuShowInternalClient);
+				lstSelBotPopup.addPopupMenuListener(new PopupMenuListener() {
+					@Override
+					public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+						ChatServer chatServer = lst.getSelectedValue();
+	                	if(chatServer != null) {
+	                		mnuRestart.setEnabled(chatServer.isEnabled());
+							mnuDeActivate.setText(chatServer.isEnabled() ? Messages.getString("MainWindow.MNU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
+							mnuDeActivate.setSelected(chatServer.isEnabled());
+							mnuShowInternalClient.setEnabled(chatServer.isEnabled());
+	                	}
+					}
+					@Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
+					@Override public void popupMenuCanceled(PopupMenuEvent e) { }
+				});
 			}
+			ChatServer chatServer = lst.getSelectedValue();
+        	if(chatServer != null) {
+        		JMenuItem mnuAssistants = (JMenuItem)lstSelBotPopup.getComponent(5);
+        		menuServerAddAssistants(chatServer, mnuAssistants);
+        	}
+        	if(index != -1)
+        		lstSelBotPopup.show(e.getComponent(), e.getX(), e.getY());
+
+			if(lstNoSelBotPopup == null) {
+				lstNoSelBotPopup = new JPopupMenu();
+				JMenuItem mnuAdd = new JMenuItem(Messages.getString("MainWindow.MNU_ADD_DOTS")); //$NON-NLS-1$
+				mnuAdd.addActionListener(ev -> {
+					menuServerNew();
+				});
+				lstNoSelBotPopup.add(mnuAdd);
+			}
+		}
+	}
+
+	/**
+	 * Show internal chat client for the given chat server.
+	 * @param cs Chat server object
+	 */
+	public void showInternalChatClient(ChatServer cs) {
+		String[] keys = cs.internalAuthRequest();
+		if(keys != null) {
+		    InternalClientFrame client = new InternalClientFrame(cs.getName(), "https://localhost:" + cs.getPort(), keys[0], keys[1]); //$NON-NLS-1$
+		    client.setLocationRelativeTo(mainFrame);
+		    client.setVisible(true);
 		}
 	}
 
@@ -1285,7 +1340,7 @@ public class MainWindow {
 	 * @param chatServer the chat server
 	 */
 	private void menuServerRemove(ChatServer chatServer) {
-		int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_SERVER_REMOVE_MSG"), Messages.getString("MainWindow.MB_SERVER_REMOVE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+		int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_SERVER_REMOVE_MSG"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 		if(ret == JOptionPane.YES_OPTION) {
 			if(1 == Helper.dbUpdate(conChat4Us, "UPDATE chatbots SET removed=1 WHERE id=" + chatServer.getDbId() + ";")) { //$NON-NLS-1$ //$NON-NLS-2$
 				ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
@@ -1315,7 +1370,7 @@ public class MainWindow {
 	 * @param chatServer the chat server
 	 */
 	private void menuServerDeActivate(ChatServer chatServer) {
-		int ret = Helper.showConfirmDialog(mainFrame, String.format(Messages.getString("MainWindow.MB_SERVER_DE_ACTIVATE_MSG"), (chatServer.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), chatServer.getName()), Messages.getString("MainWindow.MB_SERVER_DE_ACTIVATE_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		int ret = Helper.showConfirmDialog(mainFrame, String.format(Messages.getString("MainWindow.MB_SERVER_DE_ACTIVATE_MSG"), (chatServer.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATE") : Messages.getString("MainWindow.BOOLEAN_ACTIVATE")), chatServer.getName()), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		if(ret == JOptionPane.YES_OPTION) {
 			if(!chatServer.isStarted() && !chatServer.isEnabled()) {
 				AppAuthDialog dlg = new AppAuthDialog(MainWindow.getFrame());
@@ -1326,6 +1381,7 @@ public class MainWindow {
 				dlg.dispose();
 				if(Helper.checkKeystorePassword(pswd)) {
 					chatServer.startSecureServer(pswd);
+					Arrays.fill(pswd, (char)0);
 				} else return;
 			}
 			boolean b = !chatServer.isEnabled();
@@ -1335,6 +1391,36 @@ public class MainWindow {
 				Helper.logInfo(String.format(Messages.getString("MainWindow.LOG_SERVER_DE_ACTIVATE"), chatServer.getName(), (!b ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATED") : Messages.getString("MainWindow.BOOLEAN_ACTIVATED"))), false); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			} else Helper.logError(Messages.getString("MainWindow.SERVER_STATE_CHANGE_FAILURE"), true); //$NON-NLS-1$
 		}
+	}
+
+	/**
+	 * Menu server restart click event handler.
+	 * @param chatServer the chat server to restart
+	 */
+	private void menuServerRestart(ChatServer chatServer) {
+        int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_SERVER_RESTART_MSG"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+        if(ret == JOptionPane.YES_OPTION) {
+			if(!chatServer.isStarted() && !chatServer.isEnabled()) {
+				AppAuthDialog dlg = new AppAuthDialog(MainWindow.getFrame());
+				dlg.setLocationRelativeTo(MainWindow.getFrame());
+				dlg.setVisible(true);
+				if(dlg.isCancelled()) return;
+				char[] pswd = dlg.getPassword();
+				dlg.dispose();
+				if(Helper.checkKeystorePassword(pswd)) {
+					chatServer.startSecureServer(pswd);
+					Arrays.fill(pswd, (char)0);
+				} else return;
+			}
+			if(chatServer.isEnabled()) {
+    			chatServer.setEnabled(false);
+				lstChatBots.repaint();
+				Helper.logInfo(String.format(Messages.getString("MainWindow.LOG_SERVER_DE_ACTIVATE"), chatServer.getName(), (!chatServer.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATED") : Messages.getString("MainWindow.BOOLEAN_ACTIVATED"))), false); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+    			chatServer.setEnabled(true);
+				lstChatBots.repaint();
+				Helper.logInfo(String.format(Messages.getString("MainWindow.LOG_SERVER_DE_ACTIVATE"), chatServer.getName(), (!chatServer.isEnabled() ? Messages.getString("MainWindow.BOOLEAN_DEACTIVATED") : Messages.getString("MainWindow.BOOLEAN_ACTIVATED"))), false); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			}
+        }
 	}
 
 	/**
@@ -1348,42 +1434,44 @@ public class MainWindow {
 			if(dlg.isCancelled()) {
 				dlg.dispose();
 				getFrame().dispose();
-				System.exit(0);
+				System.exit(1);
 				return;
 			}
 			char[] pswd = dlg.getPassword();
 			dlg.dispose();
-			if(Helper.checkKeystorePassword(pswd)) {
-				int n = 0;
-				ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
-				try(Statement st = conChat4Us.createStatement();
-					ResultSet rs = st.executeQuery("SELECT * FROM chatbots WHERE removed=0;")) { //$NON-NLS-1$
-					while(rs.next()) {
-						ChatServer cs = ChatServer.fromDatabase(rs, aiServers);
-						model.addElement(cs);
-						cs.addChatServerListener(new ChatServerListener() {
-							@Override
-							public void onActivityStateChanged(ChatServer server, ChatSessionState state) { }
-							@Override
-							public void onStatsChanged(ChatServer server) { updateServerState(server); }
-
-						});
-						Helper.logInfo(String.format(Messages.getString("MainWindow.CHAT_SERVER_STARTING"), cs.toString()), false); //$NON-NLS-1$
-						cs.startSecureServer(pswd);
-						n++;
-						if(!cs.isStarted())
-							cs.setEnabled(false);
-					}
-					//lblChatBotsCount.setText(n + ""); //$NON-NLS-1$
-					return;
-				} catch (Exception ex) {
-					Helper.logError(ex, Messages.getString("MainWindow.CHATBOTS_LOADING_ERROR"), true); //$NON-NLS-1$
-				}
-			} else {
-				dlg.dispose();
+			try {
+				selfSigned = Helper.isSelfSigned(pswd);
+			} catch(Exception ex) {
+				Helper.logError(Messages.getString("MainWindow.LOG_FATAL_AUTH_ERROR"), true); //$NON-NLS-1$
 				getFrame().dispose();
-				System.exit(0);
+				System.exit(1);
+				return;
 			}
+
+			ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
+			try(Statement st = conChat4Us.createStatement();
+					ResultSet rs = st.executeQuery("SELECT * FROM chatbots WHERE removed=0;")) { //$NON-NLS-1$
+				ChatServer cs;
+				while(rs.next()) {
+					cs = ChatServer.fromDatabase(rs, aiServers);
+					model.addElement(cs);
+					cs.addChatServerListener(new ChatServerListener() {
+						@Override
+						public void onActivityStateChanged(ChatServer server, ChatSessionState state) { }
+						@Override
+						public void onStatsChanged(ChatServer server) { updateServerState(server); }
+
+					});
+					Helper.logInfo(String.format(Messages.getString("MainWindow.CHAT_SERVER_STARTING"), cs.toString()), false); //$NON-NLS-1$
+					cs.startSecureServer(pswd);
+					if(!cs.isStarted())
+						cs.setEnabled(false);
+				}
+				return;
+			} catch (Exception ex) {
+				Helper.logError(ex, Messages.getString("MainWindow.CHATBOTS_LOADING_ERROR"), true); //$NON-NLS-1$
+			}
+			Arrays.fill(pswd, '\0');
 			getFrame().dispose();
 		});
 	}
@@ -1392,36 +1480,28 @@ public class MainWindow {
 	 * Load websites from database.
 	 */
 	private void loadWebsites() {
-		int n = 0;
 		IdLabelComboModel model = (IdLabelComboModel)lstWebsites.getModel();
 		try(Statement st = conChat4Us.createStatement();
 			ResultSet rs = st.executeQuery("SELECT id, domain FROM websites WHERE removed=0;")) { //$NON-NLS-1$
-			while(rs.next()) {
+			while(rs.next())
 				model.addElement(new IdLabelComboElement(rs.getInt("id"), rs.getString("domain"), true)); //$NON-NLS-1$ //$NON-NLS-2$
-				n++;
-			}
 		} catch (SQLException ex) {
 			Helper.logError(ex, Messages.getString("MainWindow.WEBSITE_LOADING_ERROR"), true); //$NON-NLS-1$
 		}
-		//lblWebsitesCount.setText(n + ""); //$NON-NLS-1$
 	}
 
 	/**
 	 * Load agents from database.
 	 */
 	private void loadAgents() {
-		int n = 0;
 		IdLabelComboModel model = (IdLabelComboModel)lstAgents.getModel();
 		try(Statement st = conChat4Us.createStatement()) {
 			ResultSet rs = st.executeQuery("SELECT id, name FROM agents WHERE removed=0;"); //$NON-NLS-1$
-			while(rs.next()) {
+			while(rs.next())
 				model.addElement(new IdLabelComboElement(rs.getInt("id"), rs.getString("name"), true)); //$NON-NLS-1$ //$NON-NLS-2$
-				n++;
-			}
 		} catch (SQLException ex) {
 			Helper.logError(ex, Messages.getString("MainWindow.AGENTS_LOADING_ERROR"), true); //$NON-NLS-1$
 		}
-		//lblAgentsCount.setText(n + ""); //$NON-NLS-1$
 	}
 
 	/**
@@ -1447,9 +1527,11 @@ public class MainWindow {
 	 * @return index of the tab, -1 if not opened.
 	 */
 	public int isRiaFileAlreadyOpened(String riaFile) {
+		JScrollPane sp;
+        RiaEditorPanel editor;
 		for(int i = 0; i < tabbedPaneRight.getTabCount(); i++) {
-			JScrollPane sp = (JScrollPane)tabbedPaneRight.getComponentAt(i);
-			RiaEditorPanel editor = (RiaEditorPanel)sp.getViewport().getView();
+			sp = (JScrollPane)tabbedPaneRight.getComponentAt(i);
+			editor = (RiaEditorPanel)sp.getViewport().getView();
 			if(riaFile.equals(editor.getRiaFile()))
 				return i;
 		}
@@ -1463,6 +1545,8 @@ public class MainWindow {
 		File baseDir = new File("./"); //$NON-NLS-1$
 		mnuOpenedList.removeAll();
 		int nMax = settings.getMaxRecentFiles();
+		File f;
+		String s;
 		List<String> openedRecently = settings.getOpenedRecently();
 		for(int i = 0; i < Math.min(nMax, openedRecently.size()); i++) {
 			final int index = i;
@@ -1473,8 +1557,8 @@ public class MainWindow {
 				Helper.logWarning(String.format(Messages.getString("MainWindow.INVALID_RIA_FILE"), riaFile), false); //$NON-NLS-1$
 				continue;
 			}
-			File f = new File(riaFile);
-			String s = Helper.getRelativePath(new File(riaFile), baseDir);
+			f = new File(riaFile);
+			s = Helper.getRelativePath(new File(riaFile), baseDir);
 			JMenuItem mnu = new JMenuItem(s.contains("..") ? f.getAbsolutePath() : s); //$NON-NLS-1$
 			mnu.addActionListener(ev -> {
 				int ri = isRiaFileAlreadyOpened(riaFile);
@@ -1824,21 +1908,24 @@ public class MainWindow {
 			@Override
 			public void windowClosing(WindowEvent e) {
 				boolean cancelled = false;
-				int rslt = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_DISCONNECT_ALL_MSG"), Messages.getString("MainWindow.MB_DISCONNECTT_ALL_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+				int rslt = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_DISCONNECT_ALL_MSG"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 				if(rslt == JOptionPane.YES_OPTION) {
+					JScrollPane sp;
+					RiaEditorPanel editor;
 					while(tabbedPaneRight.getTabCount() > 0) {
 						tabbedPaneRight.setSelectedIndex(0);
-						JScrollPane sp = (JScrollPane)tabbedPaneRight.getComponentAt(0);
-						RiaEditorPanel editor = (RiaEditorPanel)sp.getViewport().getView();
+						sp = (JScrollPane)tabbedPaneRight.getComponentAt(0);
+						editor = (RiaEditorPanel)sp.getViewport().getView();
 						cancelled |= editor.onClose() == JOptionPane.CANCEL_OPTION;
 						if(cancelled)
 							break;
 					}
 					if(!cancelled) {
 						timer.stop();
+						ChatServer cs;
 						ChatServerListModel model = (ChatServerListModel)lstChatBots.getModel();
 						for(int i = 0; i < model.getSize(); i++) {
-							ChatServer cs = model.getElementAt(i);
+							cs = model.getElementAt(i);
 							cs.stopServer();
 						}
 						settings.setMainWndState(mainFrame.getExtendedState());
@@ -1877,8 +1964,8 @@ public class MainWindow {
 		menuBar.setFocusable(false);
 		mainFrame.setJMenuBar(menuBar);
 
-		JMenu mnNewMenu = new JMenu(Messages.getString("MainWindow.MNU_FILE")); //$NON-NLS-1$
-		mnNewMenu.addMenuListener(new MenuListener() {
+		JMenu mnuFile = new JMenu(Messages.getString("MainWindow.MNU_FILE")); //$NON-NLS-1$
+		mnuFile.addMenuListener(new MenuListener() {
 			public void menuCanceled(MenuEvent e) { }
 			public void menuDeselected(MenuEvent e) { }
 			public void menuSelected(MenuEvent e) {
@@ -1888,7 +1975,7 @@ public class MainWindow {
 				mnuCloseDoc.setEnabled(onRiaDoc);
 			}
 		});
-		menuBar.add(mnNewMenu);
+		menuBar.add(mnuFile);
 
 		JMenuItem mnuQuit = new JMenuItem(Messages.getString("MainWindow.MNU_QUIT")); //$NON-NLS-1$
 		mnuQuit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F4, InputEvent.ALT_DOWN_MASK));
@@ -1905,7 +1992,7 @@ public class MainWindow {
 				btnNew.doClick();
 			}
 		});
-		mnNewMenu.add(mnuNewDoc);
+		mnuFile.add(mnuNewDoc);
 
 		mnuOpenDoc = new JMenuItem(Messages.getString("MainWindow.MNU_OPEN_FILE")); //$NON-NLS-1$
 		mnuOpenDoc.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
@@ -1914,7 +2001,11 @@ public class MainWindow {
 				btnOpen.doClick();
 			}
 		});
-		mnNewMenu.add(mnuOpenDoc);
+		mnuFile.add(mnuOpenDoc);
+
+				mnuRecentDoc = new JMenu(Messages.getString("MainWindow.MNU_OPENED_RECENTLY")); //$NON-NLS-1$
+				mnuFile.add(mnuRecentDoc);
+		mnuFile.addSeparator();
 
 		mnuSaveDoc = new JMenuItem(Messages.getString("MainWindow.MNU_SAVE_FILE")); //$NON-NLS-1$
 		mnuSaveDoc.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
@@ -1923,7 +2014,7 @@ public class MainWindow {
 				btnSave.doClick();
 			}
 		});
-		mnNewMenu.add(mnuSaveDoc);
+		mnuFile.add(mnuSaveDoc);
 
 		mnuSaveAsDoc = new JMenuItem(Messages.getString("MainWindow.MNU_SAVE_FILE_AS")); //$NON-NLS-1$
 		mnuSaveAsDoc.addActionListener(new ActionListener() {
@@ -1931,7 +2022,8 @@ public class MainWindow {
 				btnSaveAs.doClick();
 			}
 		});
-		mnNewMenu.add(mnuSaveAsDoc);
+		mnuFile.add(mnuSaveAsDoc);
+		mnuFile.addSeparator();
 
 		mnuCloseDoc = new JMenuItem(Messages.getString("MainWindow.MNU_CLOSE")); //$NON-NLS-1$
 		mnuCloseDoc.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
@@ -1944,14 +2036,9 @@ public class MainWindow {
 				} else Toolkit.getDefaultToolkit().beep();
 			}
 		});
-		mnNewMenu.add(mnuCloseDoc);
-
-		JSeparator separator_5 = new JSeparator();
-		mnNewMenu.add(separator_5);
-
-		mnuRecentDoc = new JMenu(Messages.getString("MainWindow.MNU_OPENED_RECENTLY")); //$NON-NLS-1$
-		mnNewMenu.add(mnuRecentDoc);
-		mnNewMenu.add(mnuQuit);
+		mnuFile.add(mnuCloseDoc);
+		mnuFile.addSeparator();
+		mnuFile.add(mnuQuit);
 
 		mnuChatBotAI = new JMenu(Messages.getString("MainWindow.MNU_CHATBOTS")); //$NON-NLS-1$
 		menuBar.add(mnuChatBotAI);
@@ -1976,9 +2063,7 @@ public class MainWindow {
 
 		mnuOpenedList = new JMenu(Messages.getString("MainWindow.MNU_OPENED_RECENTLY")); //$NON-NLS-1$
 		mnuChatBotAI.add(mnuOpenedList);
-
-		JSeparator separator_4 = new JSeparator();
-		mnuChatBotAI.add(separator_4);
+		mnuChatBotAI.addSeparator();
 
 		JMenu mnuChatServers = new JMenu(Messages.getString("MainWindow.MNU_SERVERS")); //$NON-NLS-1$
 		mnuChatServers.addMenuListener(new MenuListener() {
@@ -1986,23 +2071,28 @@ public class MainWindow {
 			public void menuDeselected(MenuEvent e) { }
 			public void menuSelected(MenuEvent e) {
 				ChatServer cs = lstChatBots.getSelectedValue();
-				boolean enabled = cs != null;
-				if(enabled) {
+				boolean activated = false;
+				boolean selected = cs != null;
+				if(selected) {
+					activated = cs.isEnabled();
 					menuServerAddAssistants(cs, mnuServerAssistants);
 				}
-				if(enabled) {
+				if(selected) {
 					mnuServerDeActivate.setSelected(cs.isEnabled());
 					mnuServerDeActivate.setText(cs.isEnabled() ? Messages.getString("MainWindow.MNUU_DEACTIVATE") : Messages.getString("MainWindow.MNU_ACTIVATE")); //$NON-NLS-1$ //$NON-NLS-2$
 				}
-				mnuServerDeActivate.setEnabled(enabled);
-				mnuServerAssistants.setEnabled(enabled);
-				mnuServerRemove.setEnabled(enabled);
-				mnuServerEdit.setEnabled(enabled);
+				mnuServerRestart.setEnabled(activated);
+				mnuServerDeActivate.setEnabled(selected);
+				mnuServerAssistants.setEnabled(selected);
+				mnuServerRemove.setEnabled(selected);
+				mnuServerEdit.setEnabled(selected);
+				mnuOpenInEditor.setEnabled(selected);
+				mnuInternalChatClient.setEnabled(selected && activated);
 			}
 		});
 		menuBar.add(mnuChatServers);
 
-		JMenuItem mnuNewServer = new JMenuItem(Messages.getString("MainWindow.MNU_NEW_DOTS")); //$NON-NLS-1$
+		JMenuItem mnuNewServer = new JMenuItem(Messages.getString("MainWindow.MNU_NEW_SERVER")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuNewServer.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				tabbedPaneLeft.setSelectedIndex(0);
@@ -2011,10 +2101,7 @@ public class MainWindow {
 			}
 		});
 		mnuChatServers.add(mnuNewServer);
-
-		JSeparator separator_1 = new JSeparator();
-		mnuChatServers.add(separator_1);
-
+		mnuChatServers.addSeparator();
 		mnuServerDeActivate = new JCheckBoxMenuItem(Messages.getString("MainWindow.MNU_DEACTIVATE")); //$NON-NLS-1$
 		mnuServerDeActivate.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -2023,9 +2110,11 @@ public class MainWindow {
 				menuServerDeActivate(lstChatBots.getSelectedValue());
 			}
 		});
+		mnuServerRestart = new JMenuItem(Messages.getString("MainWindow.MNU_RESTART")); //$NON-NLS-1$
+		mnuChatServers.add(mnuServerRestart);
 		mnuServerDeActivate.setSelected(true);
 		mnuChatServers.add(mnuServerDeActivate);
-
+		mnuChatServers.addSeparator();
 		mnuServerEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
 		mnuServerEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -2048,9 +2137,16 @@ public class MainWindow {
 
 		mnuServerAssistants = new JMenu(Messages.getString("MainWindow.MNU_ASSISTANTS")); //$NON-NLS-1$
 		mnuChatServers.add(mnuServerAssistants);
+		mnuChatServers.addSeparator();
 
-		JMenu mnNewMenu_3 = new JMenu(Messages.getString("MainWindow.MNU_AGENTS")); //$NON-NLS-1$
-		mnNewMenu_3.addMenuListener(new MenuListener() {
+		mnuOpenInEditor = new JMenuItem(Messages.getString("MainWindow.MNU_OPEN_IN_EDITOR")); //$NON-NLS-1$ //$NON-NLS-1$
+		mnuChatServers.add(mnuOpenInEditor);
+
+		mnuInternalChatClient = new JMenuItem(Messages.getString("MainWindow.MNU_INTERNAL_CHAT_CLIENT")); //$NON-NLS-1$ //$NON-NLS-1$
+		mnuChatServers.add(mnuInternalChatClient);
+
+		JMenu mnuAgents = new JMenu(Messages.getString("MainWindow.MNU_AGENTS")); //$NON-NLS-1$
+		mnuAgents.addMenuListener(new MenuListener() {
 			public void menuCanceled(MenuEvent e) { }
 			public void menuDeselected(MenuEvent e) { }
 			public void menuSelected(MenuEvent e) {
@@ -2065,9 +2161,9 @@ public class MainWindow {
 				mnuAgentRemove.setEnabled(enabled);
 			}
 		});
-		menuBar.add(mnNewMenu_3);
+		menuBar.add(mnuAgents);
 
-		JMenuItem mnuNewAgent = new JMenuItem(Messages.getString("MainWindow.MNU_NEW_DOTS")); //$NON-NLS-1$
+		JMenuItem mnuNewAgent = new JMenuItem(Messages.getString("MainWindow.MNU_NEW_AGENT")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuNewAgent.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				tabbedPaneLeft.setSelectedIndex(1);
@@ -2075,10 +2171,8 @@ public class MainWindow {
 				menuAgentNew();
 			}
 		});
-		mnNewMenu_3.add(mnuNewAgent);
-
-		JSeparator separator_2 = new JSeparator();
-		mnNewMenu_3.add(separator_2);
+		mnuAgents.add(mnuNewAgent);
+		mnuAgents.addSeparator();
 
 		mnuAgentDeActivate = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_DEACTIVATE")); //$NON-NLS-1$
 		mnuAgentDeActivate.addActionListener(new ActionListener() {
@@ -2089,7 +2183,7 @@ public class MainWindow {
 			}
 		});
 		mnuAgentDeActivate.setSelected(true);
-		mnNewMenu_3.add(mnuAgentDeActivate);
+		mnuAgents.add(mnuAgentDeActivate);
 
 		mnuAgentEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
 		mnuAgentEdit.addActionListener(new ActionListener() {
@@ -2099,7 +2193,7 @@ public class MainWindow {
 				menuAgentEdit(lstAgents.getSelectedValue());
 			}
 		});
-		mnNewMenu_3.add(mnuAgentEdit);
+		mnuAgents.add(mnuAgentEdit);
 
 		mnuAgentRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
 		mnuAgentRemove.addActionListener(new ActionListener() {
@@ -2109,10 +2203,10 @@ public class MainWindow {
 				menuAgentRemove(lstAgents.getSelectedValue());
 			}
 		});
-		mnNewMenu_3.add(mnuAgentRemove);
+		mnuAgents.add(mnuAgentRemove);
 
-		JMenu mnNewMenu_4 = new JMenu(Messages.getString("MainWindow.MNU_WEBSITES")); //$NON-NLS-1$
-		mnNewMenu_4.addMenuListener(new MenuListener() {
+		JMenu mnuClients = new JMenu(Messages.getString("MainWindow.MNU_WEBSITES")); //$NON-NLS-1$
+		mnuClients.addMenuListener(new MenuListener() {
 			public void menuCanceled(MenuEvent e) { }
 			public void menuDeselected(MenuEvent e) { }
 			public void menuSelected(MenuEvent e) {
@@ -2127,7 +2221,7 @@ public class MainWindow {
 				mnuWebsiteRemove.setEnabled(enabled);
 			}
 		});
-		menuBar.add(mnNewMenu_4);
+		menuBar.add(mnuClients);
 
 		JMenuItem mnuNewWebsite = new JMenuItem(Messages.getString("MainWindow.MNU_NEW_DOTS")); //$NON-NLS-1$
 		mnuNewWebsite.addActionListener(new ActionListener() {
@@ -2137,10 +2231,8 @@ public class MainWindow {
 				menuWebsiteNew();
 			}
 		});
-		mnNewMenu_4.add(mnuNewWebsite);
-
-		JSeparator separator_3 = new JSeparator();
-		mnNewMenu_4.add(separator_3);
+		mnuClients.add(mnuNewWebsite);
+		mnuClients.addSeparator();
 
 		mnuWebsiteDeActivate = new JCheckBoxMenuItem(Messages.getString("MainWindow.CBMI_DEACTIVATE")); //$NON-NLS-1$
 		mnuWebsiteDeActivate.addActionListener(new ActionListener() {
@@ -2151,7 +2243,7 @@ public class MainWindow {
 			}
 		});
 		mnuWebsiteDeActivate.setSelected(true);
-		mnNewMenu_4.add(mnuWebsiteDeActivate);
+		mnuClients.add(mnuWebsiteDeActivate);
 
 		mnuWebsiteEdit = new JMenuItem(Messages.getString("MainWindow.MNU_EDIT")); //$NON-NLS-1$
 		mnuWebsiteEdit.addActionListener(new ActionListener() {
@@ -2161,7 +2253,7 @@ public class MainWindow {
 				menuWebsiteEdit(lstWebsites.getSelectedValue());
 			}
 		});
-		mnNewMenu_4.add(mnuWebsiteEdit);
+		mnuClients.add(mnuWebsiteEdit);
 
 		mnuWebsiteRemove = new JMenuItem(Messages.getString("MainWindow.MNU_DELETE")); //$NON-NLS-1$
 		mnuWebsiteRemove.addActionListener(new ActionListener() {
@@ -2171,18 +2263,19 @@ public class MainWindow {
 				menuWebsiteRemove(lstWebsites.getSelectedValue());
 			}
 		});
-		mnNewMenu_4.add(mnuWebsiteRemove);
+		mnuClients.add(mnuWebsiteRemove);
 
-		JMenu mnNewMenu_5 = new JMenu(Messages.getString("MainWindow.MNU_TOOLS")); //$NON-NLS-1$
-		menuBar.add(mnNewMenu_5);
+		JMenu mnuTools = new JMenu(Messages.getString("MainWindow.MNU_TOOLS")); //$NON-NLS-1$
+		menuBar.add(mnuTools);
 
 				mnNewMenu_1 = new JMenu(Messages.getString("MainWindow.MNU_CLEAN")); //$NON-NLS-1$
-				mnNewMenu_5.add(mnNewMenu_1);
+				mnuTools.add(mnNewMenu_1);
+				mnuTools.addSeparator();
 
 						mnuCleanLogFiles = new JMenuItem(Messages.getString("MainWindow.MNU_CLEAN_LOG_FILES")); //$NON-NLS-1$
 						mnuCleanLogFiles.addActionListener(new ActionListener() {
 							public void actionPerformed(ActionEvent e) {
-								int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_LOG_FILES_CLEAN_MSG"), Messages.getString("MainWindow.MB_LOG_FILES_CLEAN_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+								int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_LOG_FILES_CLEAN_MSG"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 								if(ret == JOptionPane.YES_OPTION) {
 									int n = 0;
 									int nMax = settings.getLogsTimeoutDays()*24*60*60*1000;
@@ -2205,7 +2298,7 @@ public class MainWindow {
 								mnuCleanChatFiles.addActionListener(new ActionListener() {
 									@Override
 									public void actionPerformed(ActionEvent e) {
-										int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_SAVED_CHATS_CLEAN_MSG"), Messages.getString("MainWindow.MB_SAVED_CHATS_CLEAN_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+										int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MB_SAVED_CHATS_CLEAN_MSG"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 										if(ret == JOptionPane.YES_OPTION) {
 											int n = 0;
 											int nMax = settings.getChatsTimeoutDays()*24*60*60*1000;
@@ -2227,13 +2320,14 @@ public class MainWindow {
 								mnuCleanDatabase = new JMenuItem(Messages.getString("MainWindow.CLEAN_DB_COMPONENTS")); //$NON-NLS-1$
 								mnuCleanDatabase.addActionListener(new ActionListener() {
 									public void actionPerformed(ActionEvent e) {
-										int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MSGBOX_DB_CLEAN_MESSAGE"), Messages.getString("MainWindow.MSGBOX_DB_CLEAN_TITLE"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
+										int ret = Helper.showConfirmDialog(mainFrame, Messages.getString("MainWindow.MSGBOX_DB_CLEAN_MESSAGE"), Messages.getString("MainWindow.MB_TITLE_CONFIRMATION"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE, 1); //$NON-NLS-1$ //$NON-NLS-2$
 										if(ret == JOptionPane.NO_OPTION)
 											return;
 										try {
+											int rowsDeleted;
 											List<String> tableNames = Helper.getNonSystemTables(conChat4Us);
 											for (String tableName : tableNames) {
-												int rowsDeleted = Helper.removeRecords(conChat4Us, tableName);
+												rowsDeleted = Helper.removeRecords(conChat4Us, tableName);
 												if (rowsDeleted > 0)
 													Helper.logInfo(String.format(Messages.getString("MainWindow.LOG_DB_N_RECS_REMOVED"), rowsDeleted, tableName), false); //$NON-NLS-1$
 											}
@@ -2248,9 +2342,6 @@ public class MainWindow {
 									}
 								});
 								mnNewMenu_1.add(mnuCleanDatabase);
-
-								separator_6 = new JSeparator();
-								mnNewMenu_5.add(separator_6);
 
 								mnuSettings = new JMenuItem(Messages.getString("MainWindow.MNU_OPTIONS")); //$NON-NLS-1$
 								mnuSettings.addActionListener(new ActionListener() {
@@ -2268,7 +2359,7 @@ public class MainWindow {
 								});
 
 								mnNewMenu_6 = new JMenu(Messages.getString("MainWindow.MNU_SECURITY")); //$NON-NLS-1$
-								mnNewMenu_5.add(mnNewMenu_6);
+								mnuTools.add(mnNewMenu_6);
 
 														JMenuItem mnuCertGen = new JMenuItem(Messages.getString("MainWindow.MNU_CERT_REGENERATE")); //$NON-NLS-1$
 														mnNewMenu_6.add(mnuCertGen);
@@ -2291,13 +2382,11 @@ public class MainWindow {
 																dlg.dispose();
 															}
 														});
+								mnuTools.addSeparator();
+								mnuTools.add(mnuSettings);
 
-								separator_7 = new JSeparator();
-								mnNewMenu_5.add(separator_7);
-								mnNewMenu_5.add(mnuSettings);
-
-		JMenu mnNewMenu_2 = new JMenu(Messages.getString("MainWindow.MNU_HELP")); //$NON-NLS-1$
-		menuBar.add(mnNewMenu_2);
+		JMenu mnuHelp = new JMenu(Messages.getString("MainWindow.MNU_HELP")); //$NON-NLS-1$
+		menuBar.add(mnuHelp);
 
 		JMenuItem mnuAbout = new JMenuItem(Messages.getString("MainWindow.MNU_ABOUT")); //$NON-NLS-1$
 		mnuAbout.addActionListener(new ActionListener() {
@@ -2310,12 +2399,13 @@ public class MainWindow {
 		});
 
 		mnuOpenGuide = new JMenuItem(Messages.getString("MainWindow.MNU_GUIDE_OPEN")); //$NON-NLS-1$
+		mnuOpenGuide.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
 		mnuOpenGuide.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				Helper.openContent("https://chat4usai.com/chat4us-creator-user-guide/"); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuOpenGuide);
+		mnuHelp.add(mnuOpenGuide);
 
 		mnuGetStarted = new JMenuItem(Messages.getString("MainWindow.MNU_GET_STARTED")); //$NON-NLS-1$
 		mnuGetStarted.addActionListener(new ActionListener() {
@@ -2323,7 +2413,7 @@ public class MainWindow {
 				Helper.openContent("https://chat4usai.com/get-started/"); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuGetStarted);
+		mnuHelp.add(mnuGetStarted);
 
 		mnuTutorials = new JMenuItem(Messages.getString("MainWindow.MNU_TUTORIALS")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuTutorials.addActionListener(new ActionListener() {
@@ -2331,7 +2421,7 @@ public class MainWindow {
 				Helper.openContent("https://chat4usai.com/tutorials/"); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuTutorials);
+		mnuHelp.add(mnuTutorials);
 
 		mnuExamples = new JMenuItem(Messages.getString("MainWindow.MNU_EXAMPLES")); //$NON-NLS-1$
 		mnuExamples.addActionListener(new ActionListener() {
@@ -2339,7 +2429,7 @@ public class MainWindow {
 				Helper.openContent("https://chat4usai.com/chat-bots-examples/"); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuExamples);
+		mnuHelp.add(mnuExamples);
 
 		mnuSampleProjects = new JMenuItem(Messages.getString("MainWindow.MNU_SAMPLE_PROJECTS")); //$NON-NLS-1$
 		mnuSampleProjects.addActionListener(new ActionListener() {
@@ -2347,20 +2437,20 @@ public class MainWindow {
 				Helper.openContent("https://chat4usai.com/downloads#sample-projects/"); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuSampleProjects);
-		mnNewMenu_2.addSeparator();
+		mnuHelp.add(mnuSampleProjects);
+		mnuHelp.addSeparator();
 		mnuCheck4Updates = new JMenuItem(Messages.getString("MainWindow.MNU_CHECK4UPDATES")); //$NON-NLS-1$ //$NON-NLS-1$
 		mnuCheck4Updates.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				Helper.openContent("https://chat4usai.com/downloads/?app=chat4us-creator&version=" + Helper.getAppVersion()); //$NON-NLS-1$
 			}
 		});
-		mnNewMenu_2.add(mnuCheck4Updates);
-		mnNewMenu_2.addSeparator();
-		mnNewMenu_2.add(mnuAbout);
+		mnuHelp.add(mnuCheck4Updates);
+		mnuHelp.addSeparator();
+		mnuHelp.add(mnuAbout);
 
 		mnuContribute = new JMenuItem(Messages.getString("MainWindow.MNU_CONTRIBUTE")); //$NON-NLS-1$
-		mnNewMenu_2.add(mnuContribute);
+		mnuHelp.add(mnuContribute);
 
 		JToolBar toolBar = new JToolBar();
 		toolBar.setFocusable(false);

@@ -105,9 +105,10 @@ public class ScriptEx {
 		StringBuilder content = new StringBuilder();
 		try(BufferedReader reader = new BufferedReader(new java.io.FileReader(filePath))) {
 			String line;
+			String[] values;
 			int count = 0;
 			while((line = reader.readLine()) != null && count < limit) {
-				String[] values = line.split(separator);
+				values = line.split(separator);
 				if (values[column].equals(keyword)) {
 					content.append(line);
 					count++;

@@ -13,6 +13,8 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 import io.github.emmrida.chat4us.controls.IdLabelListElement;
 import io.github.emmrida.chat4us.controls.IdLabelListModel;
@@ -56,6 +58,7 @@ public class SettingsDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 
 	private boolean cancelled = true;
+	private boolean needRestart = false;
 
 	private final JPanel contentPanel = new JPanel();
 	private JTextField tfAgentResponseTimeout;
@@ -228,6 +231,10 @@ public class SettingsDialog extends JDialog {
 				JSeparator separator = new JSeparator();
 
 				cmbLanguages = new JComboBox<String>();
+				cmbLanguages.addItemListener(e1 -> {
+					needRestart = true;
+				});
+
 
 				JLabel lblNewLabel_12 = new JLabel(Messages.getString("SettingsDialog.LBL_LANGS")); //$NON-NLS-1$
 
@@ -474,6 +481,15 @@ public class SettingsDialog extends JDialog {
 			tfAiServersTasks.setText("4"); //$NON-NLS-1$
 			tfAiServersTasks.setColumns(10);
 			tfAiServersTasks.setHorizontalAlignment(JTextField.TRAILING);
+			tfAiServersTasks.getDocument().addDocumentListener(new DocumentListener() {
+				@Override
+				public void insertUpdate(DocumentEvent e) { needRestart = true; }
+				@Override
+				public void removeUpdate(DocumentEvent e) { needRestart = true; }
+				@Override
+				public void changedUpdate(DocumentEvent e) { needRestart = true; }
+
+			});
 
 			JLabel lblNewLabel_2 = new JLabel(Messages.getString("SettingsDialog.LBL_THREADS_PER_SERVER")); //$NON-NLS-1$
 
@@ -677,6 +693,8 @@ public class SettingsDialog extends JDialog {
 							settings.setNotifyOnErrors(notifyOnError);
 							settings.setMinimizeToTray(minToTray);
 							settings.save();
+							if(needRestart)
+								JOptionPane.showMessageDialog(SettingsDialog.this, Messages.getString("SettingsDialog.MB_SETTINGS_NEED_RESTART"), "Information", JOptionPane.INFORMATION_MESSAGE); //$NON-NLS-1$
 							cancelled = false;
 							setVisible(false);
 						} catch (Exception ex) {

@@ -43,7 +43,6 @@ import java.awt.event.ActionEvent;
 import java.util.List;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.Dimension;
 
 /**
  * The Class NodeSettingsDialog.
@@ -96,8 +95,9 @@ public class NodeSettingsDialog extends JDialog {
 		NodePanel.Data.fillErrorActionComboBox(cmbErrorAction);
 		cmbSuccessMove.addItem(0);
 		cmbErrorMove.addItem(0);
+		int id;
 		for(int i = 0; i < ids.size(); i++) {
-			int id = ids.get(i);
+			id = ids.get(i);
 			if(id != data.getId()) {
 				cmbSuccessMove.addItem(id);
 				cmbErrorMove.addItem(id);
@@ -127,7 +127,6 @@ public class NodeSettingsDialog extends JDialog {
 	 */
 	public NodeSettingsDialog(JFrame parent, NodePanel.Data data, List<Integer> ids) {
 		super(parent, String.format(Messages.getString("NodeSettingsDialog.DLG_TITLE"), data.getId()), true); //$NON-NLS-1$
-		//setTitle(Messages.getString("NodeSettingsDialog.DLG_TITLE")); //$NON-NLS-1$
 		setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 		addWindowListener(new WindowAdapter() {
 			@Override
@@ -151,9 +150,8 @@ public class NodeSettingsDialog extends JDialog {
 		});
 		this.data = data;
 		this.ids = ids;
-		//setLocationRelativeTo(parent);
 		Settings settings = MainWindow.getSettings();
-		setSize(new Dimension(468, 364));
+		setSize(settings.getDlgRouteItemSize());
 		setLocation(settings.getDlgRouteItemPos());
 		getContentPane().setLayout(new BorderLayout());
 		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));

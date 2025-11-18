@@ -20,7 +20,6 @@ import javax.swing.JTextField;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.LayoutStyle.ComponentPlacement;
-import javax.swing.JSeparator;
 import javax.swing.JComboBox;
 import javax.swing.JTextArea;
 import javax.swing.JScrollPane;
@@ -46,6 +45,7 @@ import java.util.Objects;
 
 import org.eclipse.wb.swing.FocusTraversalOnArray;
 import java.awt.Component;
+import javax.swing.SwingConstants;
 
 /**
  * The ChatServer Dialog. This dialog is used to add/edit a chat server.
@@ -69,24 +69,25 @@ public class ChatServerDialog extends JDialog {
 	private JTextArea taDescription;
 	private JButton btnAdd;
 	private JButton btnCancel;
+	private JTextField tfAiContextSize;
 
 	/**
 	 * Check if the dialog is cancelled
 	 * @return true if the dialog is cancelled
 	 */
-	public boolean isCancelled()         { return canceled; }
+	public boolean isCancelled() { return canceled; }
 
 	/**
 	 * Check if the dialog is edited or a new chat server is added
 	 * @return true if the dialog is edited, false if a new chat server is added
 	 */
-	public boolean isEdited()            { return edited; }
+	public boolean isEdited() { return edited; }
 
 	/**
 	 * Get the chat server
 	 * @return the chat server
 	 */
-	public ChatServer getChatServer()    { return chatServer; }
+	public ChatServer getChatServer() { return chatServer; }
 
 	/**
 	 * Get the removed ids
@@ -98,37 +99,43 @@ public class ChatServerDialog extends JDialog {
 	 * Get the host ip
 	 * @return the host ip
 	 */
-	public String  getHostIp()           { return canceled ? null : tfHostIp.getText().trim(); }
+	public String getHostIp() { return canceled ? null : tfHostIp.getText().trim(); }
 
 	/**
 	 * Get the host port
 	 * @return the host port
 	 */
-	public int     getHostPort()         { return canceled ? 0 : Integer.parseInt(tfServerPort.getText().trim()); }
+	public int getHostPort() { return canceled ? 0 : Integer.parseInt(tfServerPort.getText().trim()); }
 
 	/**
 	 * Get the main RIA file of the chat bot
 	 * @return the ria file
 	 */
-	public String  getRiaFile()          { return canceled ? null : tfRiaFila.getText().trim(); }
+	public String getRiaFile() { return canceled ? null : tfRiaFila.getText().trim(); }
 
 	/**
 	 * Get the ai group of the chat bot
 	 * @return the ai group
 	 */
-	public int     getAIGroup()          { return canceled ? 0 : ((IdLabelComboElement)cmbAIGroup.getSelectedItem()).getId(); }
+	public int getAIGroup() { return canceled ? 0 : ((IdLabelComboElement)cmbAIGroup.getSelectedItem()).getId(); }
 
 	/**
 	 * Get the description of the chat bot
 	 * @return the description
 	 */
-	public String  getDescription()      { return canceled ? null : taDescription.getText().trim(); }
+	public String getDescription() { return canceled ? null : taDescription.getText().trim(); }
 
 	/**
 	 * Get the ai servers count
 	 * @return the ai servers count
 	 */
-	public int     getAiServersCount()   { return canceled ? 0 : tblAiServer.getRowCount(); }
+	public int getAiServersCount() { return canceled ? 0 : tblAiServer.getRowCount(); }
+
+	/**
+	 * Get the ai context size
+	 * @return the ai context size
+	 */
+	public int getAiContextSize() { return canceled ? 0 : Integer.parseInt(tfAiContextSize.getText().trim()); }
 
 	/**
 	 * Get the ai server
@@ -167,9 +174,10 @@ public class ChatServerDialog extends JDialog {
 	 * @return true if the list is valid
 	 */
 	private boolean validateAiServersList() {
+		String url;
 		DefaultTableModel model = (DefaultTableModel)tblAiServer.getModel();
 		for(int i = 0; i < model.getRowCount(); i++) {
-			String url = model.getValueAt(i, 1).toString().trim();
+			url = model.getValueAt(i, 1).toString().trim();
 			if(url.length() <= 7)
 				return false;
 			if(!Helper.isValidURL(url))
@@ -191,6 +199,7 @@ public class ChatServerDialog extends JDialog {
 		setTitle(Messages.getString("ChatServerDialog.DLG_TITLE_EDIT")); //$NON-NLS-1$
 		tfHostIp.setText(cs.getHost());
 		tfServerPort.setText(String.valueOf(cs.getPort()));
+		tfAiContextSize.setText(String.valueOf(cs.getAiContextSize()));
 		tfRiaFila.setText(cs.getChatClient().getChatBotClient().getRiaFileName());
 		taDescription.setText(cs.getDescription());
 		DefaultTableModel tblModel = (DefaultTableModel)tblAiServer.getModel();
@@ -245,6 +254,7 @@ public class ChatServerDialog extends JDialog {
 		tfHostIp.setColumns(10);
 
 		tfServerPort = new JTextField();
+		tfServerPort.setHorizontalAlignment(SwingConstants.TRAILING);
 		tfServerPort.setColumns(10);
 
 		JLabel lblNewLabel_2 = new JLabel(Messages.getString("ChatServerDialog.LBL_PORT")); //$NON-NLS-1$
@@ -277,10 +287,6 @@ public class ChatServerDialog extends JDialog {
 
 		JScrollPane scrollPane_1 = new JScrollPane();
 
-		JSeparator separator = new JSeparator();
-
-		JLabel lblNewLabel_3 = new JLabel(Messages.getString("ChatServerDialog.LBL_AISRV_TABLE")); //$NON-NLS-1$
-
 		JButton btnNewAiServer = new JButton("+"); //$NON-NLS-1$
 		btnNewAiServer.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -304,79 +310,94 @@ public class ChatServerDialog extends JDialog {
 				} else Toolkit.getDefaultToolkit().beep();
 			}
 		});
+
+		tfAiContextSize = new JTextField();
+		tfAiContextSize.setHorizontalAlignment(SwingConstants.TRAILING);
+		tfAiContextSize.setColumns(10);
+
+		JLabel lblNewLabel = new JLabel(Messages.getString("ChatServerDialog.LBL_CONTEXT_SIZE")); //$NON-NLS-1$
+
+				JLabel lblNewLabel_3 = new JLabel(Messages.getString("ChatServerDialog.LBL_AISRV_TABLE")); //$NON-NLS-1$
+				contentPanel.setFocusTraversalPolicy(new FocusTraversalOnArray(new Component[]{lblNewLabel_1, tfHostIp, lblNewLabel_2, tfServerPort, lblNewLabel_6, cmbAIGroup, lblNewLabel_9, tfRiaFila, btnRiaBrowse, lblNewLabel_3, scrollPane_1, tblAiServer, btnNewAiServer, btnRemoveAiServer, lblNewLabel_5, scrollPane, taDescription, tfAiContextSize, lblNewLabel}));
 		GroupLayout gl_contentPanel = new GroupLayout(contentPanel);
 		gl_contentPanel.setHorizontalGroup(
 			gl_contentPanel.createParallelGroup(Alignment.LEADING)
 				.addGroup(gl_contentPanel.createSequentialGroup()
 					.addGap(6)
 					.addGroup(gl_contentPanel.createParallelGroup(Alignment.TRAILING)
-						.addComponent(btnRemoveAiServer, GroupLayout.PREFERRED_SIZE, 45, GroupLayout.PREFERRED_SIZE)
-						.addComponent(lblNewLabel_9)
-						.addComponent(lblNewLabel_5)
-						.addComponent(lblNewLabel_6)
-						.addComponent(lblNewLabel_2)
-						.addComponent(lblNewLabel_1)
-						.addComponent(lblNewLabel_3)
-						.addComponent(btnNewAiServer, GroupLayout.PREFERRED_SIZE, 45, GroupLayout.PREFERRED_SIZE))
-					.addGap(6)
-					.addGroup(gl_contentPanel.createParallelGroup(Alignment.LEADING)
-						.addGroup(gl_contentPanel.createSequentialGroup()
-							.addComponent(separator, GroupLayout.DEFAULT_SIZE, 331, Short.MAX_VALUE)
-							.addGap(6))
-						.addGroup(gl_contentPanel.createSequentialGroup()
-							.addComponent(tfHostIp, GroupLayout.PREFERRED_SIZE, 164, GroupLayout.PREFERRED_SIZE)
-							.addContainerGap())
 						.addGroup(gl_contentPanel.createSequentialGroup()
 							.addGroup(gl_contentPanel.createParallelGroup(Alignment.TRAILING)
-								.addComponent(cmbAIGroup, 0, 335, Short.MAX_VALUE)
-								.addGroup(gl_contentPanel.createSequentialGroup()
-									.addComponent(tfRiaFila, GroupLayout.DEFAULT_SIZE, 284, Short.MAX_VALUE)
-									.addPreferredGap(ComponentPlacement.RELATED)
-									.addComponent(btnRiaBrowse))
-								.addComponent(scrollPane, Alignment.LEADING)
-								.addComponent(scrollPane_1, 0, 0, Short.MAX_VALUE))
-							.addGap(6))
+								.addComponent(lblNewLabel_6)
+								.addComponent(lblNewLabel)
+								.addComponent(lblNewLabel_5)
+								.addComponent(lblNewLabel_9)
+								.addComponent(lblNewLabel_1)
+								.addComponent(btnNewAiServer, GroupLayout.PREFERRED_SIZE, 45, GroupLayout.PREFERRED_SIZE)
+								.addComponent(btnRemoveAiServer, GroupLayout.PREFERRED_SIZE, 45, GroupLayout.PREFERRED_SIZE))
+							.addGap(4))
 						.addGroup(gl_contentPanel.createSequentialGroup()
-							.addComponent(tfServerPort, GroupLayout.PREFERRED_SIZE, 74, GroupLayout.PREFERRED_SIZE)
-							.addContainerGap())))
+							.addComponent(lblNewLabel_3)
+							.addPreferredGap(ComponentPlacement.RELATED)))
+					.addGroup(gl_contentPanel.createParallelGroup(Alignment.LEADING)
+						.addGroup(gl_contentPanel.createSequentialGroup()
+							.addComponent(tfAiContextSize, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
+							.addContainerGap())
+						.addGroup(gl_contentPanel.createParallelGroup(Alignment.LEADING)
+							.addGroup(gl_contentPanel.createSequentialGroup()
+								.addComponent(tfHostIp, GroupLayout.PREFERRED_SIZE, 164, GroupLayout.PREFERRED_SIZE)
+								.addContainerGap())
+							.addGroup(gl_contentPanel.createSequentialGroup()
+								.addGroup(gl_contentPanel.createParallelGroup(Alignment.TRAILING)
+									.addComponent(scrollPane_1, GroupLayout.DEFAULT_SIZE, 371, Short.MAX_VALUE)
+									.addComponent(cmbAIGroup, 0, 371, Short.MAX_VALUE)
+									.addComponent(scrollPane)
+									.addGroup(gl_contentPanel.createSequentialGroup()
+										.addGroup(gl_contentPanel.createParallelGroup(Alignment.TRAILING)
+											.addGroup(gl_contentPanel.createSequentialGroup()
+												.addPreferredGap(ComponentPlacement.RELATED)
+												.addComponent(lblNewLabel_2)
+												.addPreferredGap(ComponentPlacement.RELATED)
+												.addComponent(tfServerPort, GroupLayout.PREFERRED_SIZE, 74, GroupLayout.PREFERRED_SIZE))
+											.addComponent(tfRiaFila, GroupLayout.DEFAULT_SIZE, 320, Short.MAX_VALUE))
+										.addPreferredGap(ComponentPlacement.RELATED)
+										.addComponent(btnRiaBrowse)))
+								.addGap(6)))))
 		);
 		gl_contentPanel.setVerticalGroup(
 			gl_contentPanel.createParallelGroup(Alignment.LEADING)
 				.addGroup(gl_contentPanel.createSequentialGroup()
 					.addGap(6)
 					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
+						.addComponent(tfHostIp, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE)
 						.addComponent(lblNewLabel_1)
-						.addComponent(tfHostIp, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE))
-					.addPreferredGap(ComponentPlacement.RELATED)
-					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
 						.addComponent(lblNewLabel_2)
 						.addComponent(tfServerPort, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE))
-					.addGap(5)
-					.addComponent(separator, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
+						.addComponent(tfRiaFila, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE)
+						.addComponent(lblNewLabel_9)
+						.addComponent(btnRiaBrowse, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE))
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
+						.addComponent(lblNewLabel)
+						.addComponent(tfAiContextSize, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE))
 					.addPreferredGap(ComponentPlacement.RELATED)
 					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
 						.addComponent(lblNewLabel_6)
 						.addComponent(cmbAIGroup, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE))
-					.addGap(9)
-					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
-						.addComponent(lblNewLabel_9)
-						.addComponent(btnRiaBrowse, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE)
-						.addComponent(tfRiaFila, GroupLayout.PREFERRED_SIZE, 22, GroupLayout.PREFERRED_SIZE))
-					.addGroup(gl_contentPanel.createParallelGroup(Alignment.LEADING, false)
+					.addPreferredGap(ComponentPlacement.RELATED)
+					.addGroup(gl_contentPanel.createParallelGroup(Alignment.TRAILING)
+						.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
+							.addComponent(scrollPane_1, GroupLayout.PREFERRED_SIZE, 101, GroupLayout.PREFERRED_SIZE)
+							.addComponent(lblNewLabel_3))
 						.addGroup(gl_contentPanel.createSequentialGroup()
-							.addGap(9)
-							.addComponent(scrollPane_1, GroupLayout.PREFERRED_SIZE, 101, GroupLayout.PREFERRED_SIZE))
-						.addGroup(gl_contentPanel.createSequentialGroup()
-							.addGap(18)
-							.addComponent(lblNewLabel_3)
-							.addPreferredGap(ComponentPlacement.RELATED, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
 							.addComponent(btnRemoveAiServer)
-							.addGap(1)
+							.addGap(3)
 							.addComponent(btnNewAiServer)))
-					.addPreferredGap(ComponentPlacement.UNRELATED)
+					.addPreferredGap(ComponentPlacement.RELATED)
 					.addGroup(gl_contentPanel.createParallelGroup(Alignment.BASELINE)
-						.addComponent(lblNewLabel_5)
-						.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 95, Short.MAX_VALUE))
+						.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 95, Short.MAX_VALUE)
+						.addComponent(lblNewLabel_5))
 					.addGap(6))
 		);
 
@@ -407,7 +428,6 @@ public class ChatServerDialog extends JDialog {
 		taDescription.setWrapStyleWord(true);
 		scrollPane.setViewportView(taDescription);
 		contentPanel.setLayout(gl_contentPanel);
-		contentPanel.setFocusTraversalPolicy(new FocusTraversalOnArray(new Component[]{lblNewLabel_1, tfHostIp, lblNewLabel_2, tfServerPort, separator, lblNewLabel_6, cmbAIGroup, lblNewLabel_9, tfRiaFila, btnRiaBrowse, lblNewLabel_3, scrollPane_1, tblAiServer, btnNewAiServer, btnRemoveAiServer, lblNewLabel_5, scrollPane, taDescription}));
 		{
 			JPanel buttonPane = new JPanel();
 			buttonPane.setLayout(new FlowLayout(FlowLayout.TRAILING));
@@ -418,13 +438,17 @@ public class ChatServerDialog extends JDialog {
 					public void actionPerformed(ActionEvent e) {
 						if(Helper.isValidIP(tfHostIp.getText().trim())) {
 							if(Helper.isNumeric(tfServerPort.getText().trim())) {
-								if(new File(tfRiaFila.getText().trim()).exists()) {
-									if(validateAiServersList()) {
-										canceled = false;
-										setVisible(false);
-										return;
+                                if(Helper.isNumeric(tfAiContextSize.getText().trim())) {
+									if(new File(tfRiaFila.getText().trim()).exists()) {
+										if(cmbAIGroup.getSelectedIndex() >= 0) {
+											if(validateAiServersList()) {
+												canceled = false;
+												setVisible(false);
+												return;
+											}
+										}
 									}
-								}
+                                }
 							}
 						}
 						JOptionPane.showMessageDialog(ChatServerDialog.this, Messages.getString("ChatServerDialog.MB_ERROR_MSG"), Messages.getString("ChatServerDialog.MB_ERROR_TITLE"), JOptionPane.ERROR_MESSAGE); //$NON-NLS-1$ //$NON-NLS-2$

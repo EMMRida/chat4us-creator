@@ -126,17 +126,19 @@ public class UExceptionDialog extends JDialog {
 		 */
 
 		try {
+			int start;
+			int end;
+			String el;
 			taInfo.setText(Messages.getString("UExceptionDialog.DLG_MESSAGE")); //$NON-NLS-1$
-
 			styledDoc = taStackTrace.getStyledDocument();
 			Style style = styledDoc.addStyle("AppLines", null); //$NON-NLS-1$
 			StyleConstants.setForeground(style, Color.RED);
 			taStackTrace.setText(String.format(Messages.getString("UExceptionDialog.EX_STACK_TRACE_HEADER"), e.getClass().getSimpleName(), t.getName(), e.getLocalizedMessage())); //$NON-NLS-1$
 			for(StackTraceElement ste : e.getStackTrace()) {
-				int start = taStackTrace.getCaretPosition();
-				String el = ste.toString();
+				start = taStackTrace.getCaretPosition();
+				el = ste.toString();
 				styledDoc.insertString(styledDoc.getLength(), el + System.lineSeparator(), null);
-				int end = taStackTrace.getCaretPosition();
+				end = taStackTrace.getCaretPosition();
 				if(!el.startsWith("java")) //$NON-NLS-1$
 					styledDoc.setCharacterAttributes(start, end-start, style, false);
 			}

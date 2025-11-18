@@ -201,17 +201,17 @@ public class ChatBotSettingsDialog extends JDialog {
 		JPanel pnlOptions = new JPanel();
 		tabbedPane.addTab(Messages.getString("ChatBotSettingsDialog.TAB_OPTIONS"), null, pnlOptions, null); //$NON-NLS-1$
 
-				JLabel lblNewLabel = new JLabel(Messages.getString("ChatBotSettingsDialog.NAME"));
+				JLabel lblNewLabel = new JLabel(Messages.getString("ChatBotSettingsDialog.NAME")); //$NON-NLS-1$
 
 				tfName = new JTextField();
 				tfName.setColumns(10);
 
-				JLabel lblNewLabel_3 = new JLabel(Messages.getString("ChatBotSettingsDialog.LOCALE"));
+				JLabel lblNewLabel_3 = new JLabel(Messages.getString("ChatBotSettingsDialog.LOCALE")); //$NON-NLS-1$
 
 				tfLocale = new JTextField();
 				tfLocale.setColumns(10);
 
-				JLabel lblNewLabel_1 = new JLabel(Messages.getString("ChatBotSettingsDialog.GUIDELINES"));
+				JLabel lblNewLabel_1 = new JLabel(Messages.getString("ChatBotSettingsDialog.GUIDELINES")); //$NON-NLS-1$
 
 				JScrollPane scrollPane_1 = new JScrollPane();
 				scrollPane_1.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -262,7 +262,7 @@ public class ChatBotSettingsDialog extends JDialog {
 		JPanel pnlParams = new JPanel();
 		tabbedPane.addTab(Messages.getString("ChatBotSettingsDialog.TAB_PARAMS"), null, pnlParams, null); //$NON-NLS-1$
 
-				JLabel lblNewLabel_2 = new JLabel(Messages.getString("ChatBotSettingsDialog.PARAMS"));
+				JLabel lblNewLabel_2 = new JLabel(Messages.getString("ChatBotSettingsDialog.PARAMS")); //$NON-NLS-1$
 
 				JButton btnRemoveRow = new JButton("-"); //$NON-NLS-1$
 				btnRemoveRow.addActionListener(new ActionListener() {

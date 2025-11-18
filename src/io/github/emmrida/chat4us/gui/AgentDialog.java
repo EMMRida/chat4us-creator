@@ -273,9 +273,13 @@ public class AgentDialog extends JDialog {
 						if(Helper.isValidIP(tfHost.getText())) {
 							if(Helper.isNumeric(tfPort.getText())) {
 								if(tfName.getText().trim().length() > 2) {
-									cancelled = false;
-									setVisible(false);
-									return;
+									if(cmbPoste.getSelectedItem() != null) {
+										if(cmbAiGroup.getSelectedItem() != null) {
+											cancelled = false;
+											setVisible(false);
+											return;
+										}
+                                    }
 								}
 							}
 						}

@@ -7,6 +7,7 @@ package io.github.emmrida.chat4us.gui;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Frame;
+import java.awt.Toolkit;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
@@ -22,9 +23,16 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.JPasswordField;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.ActionEvent;
+import java.awt.SystemColor;
+import javax.swing.UIManager;
+import java.awt.Font;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 /**
  * The application authentication dialog. This dialog is used to authenticate the user to access the application.
@@ -36,13 +44,23 @@ public class AppAuthDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 
 	private boolean cancelled  = true;
+    private Timer timer;
 
 	private final JPanel contentPanel = new JPanel();
 	private JPasswordField tfPassword;
 	private JButton cancelButton;
+	private JLabel lblXXXLock;
 
 	public boolean isCancelled() { return cancelled; }
 	public char[] getPassword() { return tfPassword.getPassword(); }
+
+    public static boolean isNumLockOn() {
+        return Toolkit.getDefaultToolkit().getLockingKeyState(KeyEvent.VK_NUM_LOCK);
+    }
+
+    public static boolean isCapsLockOn() {
+        return Toolkit.getDefaultToolkit().getLockingKeyState(KeyEvent.VK_CAPS_LOCK);
+    }
 
 	/**
 	 * Create the dialog.
@@ -50,10 +68,13 @@ public class AppAuthDialog extends JDialog {
 	 */
 	public AppAuthDialog(Frame parent) {
 		super(parent, Messages.getString("AppAuthDialog.DLG_TITLE"), true); //$NON-NLS-1$
-		//setTitle(Messages.getString("AppAuthDialog.DLG_TITLE")); //$NON-NLS-1$
+		addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				timer.stop();
+			}
+		});
 		setResizable(false);
-		//setModal(true);
-		//setBounds(100, 100, 360, 140);
 		SwingUtilities.invokeLater(() -> {
 			if(!parent.isVisible() || parent.getState() == Frame.ICONIFIED)
 				setLocationRelativeTo(null);
@@ -86,7 +107,7 @@ public class AppAuthDialog extends JDialog {
 		contentPanel.setLayout(gl_contentPanel);
 		{
 			JPanel buttonPane = new JPanel();
-			buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
+			buttonPane.setLayout(new FlowLayout(FlowLayout.TRAILING));
 			getContentPane().add(buttonPane, BorderLayout.SOUTH);
 			{
 				JButton okButton = new JButton(Messages.getString("AppAuthDialog.LBL_OK")); //$NON-NLS-1$
@@ -100,6 +121,17 @@ public class AppAuthDialog extends JDialog {
 						JOptionPane.showMessageDialog(AppAuthDialog.this, Messages.getString("AppAuthDialog.MB_WRONG_PSWD_MSG"), Messages.getString("AppAuthDialog.MB_WRONG_PSWD_TITLE"), JOptionPane.ERROR_MESSAGE); //$NON-NLS-1$ //$NON-NLS-2$
 					}
 				});
+				{
+					lblXXXLock = new JLabel((String) null); //$NON-NLS-1$
+					lblXXXLock.setVisible(false);
+					lblXXXLock.setBorder(new EmptyBorder(2, 5, 2, 5));
+					lblXXXLock.setFont(new Font("Tahoma", Font.BOLD, 13));
+					lblXXXLock.setForeground(UIManager.getColor("ToolBar.dockingForeground"));
+					lblXXXLock.setFocusable(false);
+					lblXXXLock.setOpaque(true);
+					lblXXXLock.setBackground(SystemColor.info);
+					buttonPane.add(lblXXXLock);
+				}
 				okButton.setActionCommand("OK"); //$NON-NLS-1$
 				buttonPane.add(okButton);
 				getRootPane().setDefaultButton(okButton);
@@ -117,6 +149,13 @@ public class AppAuthDialog extends JDialog {
 			}
 			Helper.registerCancelByEsc(this, cancelButton);
 			Helper.enableRtlWhenNeeded(this);
+
+			timer = new Timer(500, e -> {
+    			String warn = isCapsLockOn()||!isNumLockOn() ? Messages.getString("AppAuthDialog.KEYBOARD_WARNING") : ""; //$NON-NLS-1$
+    			lblXXXLock.setText(warn);
+    			lblXXXLock.setVisible(!warn.isEmpty());
+			});
+			timer.start();
 			pack();
 		}
 	}

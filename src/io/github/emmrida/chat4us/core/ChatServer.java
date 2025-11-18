@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -70,6 +71,10 @@ public class ChatServer {
 	private int groupId;
 	private boolean enabled;
 	private String description;
+	private int aiContextSize;
+
+	private char[] internalPostAuthKey;		// Internal chat client auth key sent in post data
+	private char[] internalHeaderAuthKey;	// Internal chat client auth key sent in header
 
 	private ChatClient chatClient;
 	private Map<String, WebsiteSession> webSessions;	// Key: "token"
@@ -152,20 +157,22 @@ public class ChatServer {
 		int n = 0;
 		long timeout = io.github.emmrida.chat4us.gui.MainWindow.getSettings().getChatSessionsTimeoutMinutes()*60*1000;
 		long now = System.currentTimeMillis();
+		boolean tout;
+		File file;
 		UserSession us;
 		ChatSession ses;
 		Iterator<Map.Entry<String, UserSession>> it = this.userSessions.entrySet().iterator();
 		while(it.hasNext()) {
 			us = it.next().getValue();
 			ses = us.getChatSession();
-			boolean tout = now - ses.getLastMsgTime() > timeout;
+			tout = now - ses.getLastMsgTime() > timeout;
 			if(tout || force || ses.isEnded()) {
 				if(tout && !ses.isEnded()) {
 					ses.setEnded(true);
 					Helper.logInfo(String.format(Messages.getString("ChatServer.CHAT_MARKED_ENDED"), ses.getUserId())); //$NON-NLS-1$
 				}
 				if(ses.isEnded() || force) {
-					File file = new File("./chat/" + ses.getUserId() + "-" + Helper.toDate(Instant.ofEpochMilli(ses.getCreationTime()), "dd-MM-yyyy_HH-mm-ss") + ".txt"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+					file = new File("./chat/" + ses.getUserId() + "-" + Helper.toDate(Instant.ofEpochMilli(ses.getCreationTime()), "dd-MM-yyyy_HH-mm-ss") + ".txt"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 					try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
 						bw.write("--Chat " + ses.getUserId() + System.lineSeparator()); //$NON-NLS-1$
 						bw.write("--Date +> Start : " + Helper.toDate(Instant.ofEpochMilli(ses.getCreationTime()), "dd-MM-yyyy HH:mm:ss") + "\tEnd : " + Helper.toDate(Instant.ofEpochMilli(ses.getLastMsgTime()), "dd-MM-yyyy HH:mm:ss") + System.lineSeparator()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
@@ -204,6 +211,7 @@ public class ChatServer {
 		this.dbId = dbId;
 		this.host = null;
 		this.port = 0;
+		this.aiContextSize = MainWindow.getSettings().getAiQueryMaxLength();
 		this.enabled = false;
 		this.server = null;
 		this.chatClient = new ChatClient();
@@ -231,22 +239,24 @@ public class ChatServer {
 	 * @param host Host name
 	 * @param port Port number
 	 * @param groupId Chat server group id
+	 * @param aiContextSize AI context size
 	 * @param aiServers List of all AI models servers.
 	 */
-	public ChatServer(int dbId, String host, int port, int groupId, List<Object[]> aiServers) {
+	public ChatServer(int dbId, String host, int port, int groupId, int aiContextSize, List<Object[]> aiServers) {
 		this(dbId);
 		Helper.requiresNotEmpty(host);
 		Objects.requireNonNull(aiServers);
-		if(dbId < 1 || port < 1 || groupId < 1)
+		if(dbId < 1 || port < 1 || groupId < 1 || aiContextSize < 1)
 			throw new IllegalArgumentException();
-		try {
+		//try {
 			this.host = host;
 			this.port = port;
 			this.groupId = groupId;
+            this.aiContextSize = aiContextSize;
 			this.description = ""; //$NON-NLS-1$
-		} catch(Exception ex) {
-			Helper.logError(ex, String.format(Messages.getString("ChatServer.SERVER_CREATION_ERROR"), host, port), true); //$NON-NLS-1$
-		}
+		//} catch(Exception ex) {
+		//	Helper.logError(ex, String.format(Messages.getString("ChatServer.SERVER_CREATION_ERROR"), host, port), true); //$NON-NLS-1$
+		//}
 	}
 
 	/**
@@ -343,6 +353,13 @@ public class ChatServer {
                     		});
                     	});
                     })
+                    .addPrefixPath("/ilogin", exchange -> { // Localhost internal client login //$NON-NLS-1$
+                    	exchange.dispatch(() -> {
+                    		executor.submit(() -> {
+                    			processWebsiteInternalLogin(exchange);
+                    		});
+                    	});
+                    })
                     .addPrefixPath("/logout", exchange -> { //$NON-NLS-1$
                     	exchange.dispatch(() -> {
                     		executor.submit(() -> {
@@ -418,6 +435,105 @@ public class ChatServer {
 	}
 
 	/**
+	 * Validate authentication keys
+	 * @param hakey Authentication key from header
+	 * @param pakey Authentication key from post
+	 * @return True if keys are valid
+	 */
+	private boolean validateAuthKeys(String hakey, String pakey) {
+    	char[] key = hakey.toCharArray();
+    	if(key.length != internalHeaderAuthKey.length)
+    		return false;
+    	for(int i = 0; i < key.length; i++)
+        	if(key[i] != internalHeaderAuthKey[i])
+        		return false;
+    	key = pakey.toCharArray();
+    	if(key.length != internalPostAuthKey.length)
+    		return false;
+    	for(int i = 0; i < key.length; i++)
+        	if(key[i] != internalPostAuthKey[i])
+        		return false;
+    	return true;
+	}
+
+	/**
+	 * Called when an internal authentication request is made in order to let an InternalClientFrame instance
+	 * to authenticate without normal credentials.
+	 * @return An array of strings containing the header[auth_key=key] and post[auth_key=key]
+	 */
+	public String[] internalAuthRequest() {
+		if(internalHeaderAuthKey  != null) {
+			if(internalHeaderAuthKey[0] != (char)0) {
+				Helper.logWarning(Messages.getString("ChatServer.INTERNAL_HAKEY_NOT_EMPTY")); //$NON-NLS-1$
+                return null;
+			}
+		}
+		if(internalPostAuthKey != null) {
+    		if(internalPostAuthKey[0] != (char)0) {
+    			Helper.logWarning(Messages.getString("ChatServer.INTERNEL_PAKEY_NOT_EMPTY")); //$NON-NLS-1$
+                return null;
+    		}
+		}
+		String[] ret = new String[] {
+				Helper.generateSecureKey(128),
+                Helper.generateSecureKey(128)
+		};
+		internalHeaderAuthKey = ret[0].toCharArray();
+        internalPostAuthKey = ret[1].toCharArray();
+        Helper.logWarning(Messages.getString("ChatServer.INTERNAL_AUTH_CLIENT_REQUEST")); //$NON-NLS-1$
+        return ret;
+	}
+
+    /**
+     * Internal client login from localhost only for testing purposes.
+     * Caller should provide header[auth_key=key] and post[auth_key=key]
+     * @param exchange HttpServerExchange object from Undertow.
+     */
+	private void processWebsiteInternalLogin(HttpServerExchange exchange) {
+		if(!this.enabled || this.terminated) {
+			Arrays.fill(internalHeaderAuthKey, (char)0);
+            Arrays.fill(internalPostAuthKey, (char)0);
+			processError(exchange, Messages.getString("ChatServer.SERVER_UNAVAILABLE_TEMP"), 503); //$NON-NLS-1$
+			return;
+		}
+		if("POST".equalsIgnoreCase(exchange.getRequestMethod().toString())) { //$NON-NLS-1$
+			String ct = exchange.getRequestHeaders().getFirst(Headers.CONTENT_TYPE);
+			if(ct.equalsIgnoreCase("application/x-www-form-urlencoded")) { //$NON-NLS-1$
+				exchange.getRequestReceiver().receiveFullString((xchng, body) -> {
+					InetAddress ia = xchng.getSourceAddress().getAddress();
+					String ip = Helper.ipv6Compress(ia.getHostAddress());
+					String domain = Helper.ipv6Compress(ia.getHostName());
+					Helper.logInfo(Messages.getString("ChatServer.INTERNAL_LOGIN_ATTEMPT_FROM") + domain + " (" + ip + ")"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					String hAuthKey = xchng.getRequestHeaders().getFirst("auth_key"); // Check for auth_key=key header //$NON-NLS-1$
+					Map<String, String> params = Helper.parsePostData(body);
+					String pAuthKey = params.get("auth_key"); //$NON-NLS-1$
+					if(hAuthKey != null && pAuthKey != null) {
+						try {
+							if(validateAuthKeys(hAuthKey, pAuthKey)) {
+								WebsiteSession ws = new WebsiteSession(null);
+								this.webSessions.put(ws.getAccessToken(), ws);
+								Map<String, Object> rslt = new HashMap<>();
+								rslt.put("TOKEN", ws.getAccessToken()); //$NON-NLS-1$
+								rslt.put("STATUS", "OK"); //$NON-NLS-1$ //$NON-NLS-2$
+								exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json"); //$NON-NLS-1$
+								exchange.getResponseSender().send(new Gson().toJson(rslt));
+								exchange.endExchange();
+								fireStatsChanged(this);
+								Helper.logInfo(String.format(Messages.getString("ChatServer.INTERNAL_CLIENT_LOGGED_FROM"), domain, ip), false); //$NON-NLS-1$
+							} else processError(exchange, Messages.getString("ChatServer.AUTH_ERROR"), 401); //$NON-NLS-1$
+						} catch(Exception ex) {
+							Helper.logWarning(ex, String.format("Internal client login failed from %s", domain), false); //$NON-NLS-1$
+							processError(exchange, Messages.getString("ChatServer.INTERNAL_ERROR"), 500); //$NON-NLS-1$
+						}
+					} else processError(exchange, Messages.getString("ChatServer.AUTH_ERROR"), 400); //$NON-NLS-1$
+					Arrays.fill(internalHeaderAuthKey, (char)0);
+                    Arrays.fill(internalPostAuthKey, (char)0);
+				});
+			} else processError(exchange, Messages.getString("ChatServer.BAD_QUERY"), 400); //$NON-NLS-1$
+		} else processError(exchange, Messages.getString("ChatServer.BAD_QUERY"), 400); //$NON-NLS-1$
+	}
+
+	/**
 	 * For a website to access this ChatServer, should provide [key1=value1, key2=value2].
 	 * We should check the ip/domain when key1 & key2 are checked then create a new website
 	 * session.
@@ -455,7 +571,7 @@ public class ChatServer {
 									exchange.getResponseSender().send(new Gson().toJson(rslt));
 									exchange.endExchange();
 									fireStatsChanged(this);
-									Helper.logInfo(String.format(Messages.getString("ChatServer.WEBSITE_SESSION_OPENED"), domain, ip), false); //$NON-NLS-1$
+									Helper.logInfo(String.format(Messages.getString("ChatServer.WEBSITE_LOGGED_IN"), domain, ip), false); //$NON-NLS-1$
 								} else processError(exchange, Messages.getString("ChatServer.AUTH_ERROR"), 401); //$NON-NLS-1$
 							} else processError(exchange, Messages.getString("ChatServer.AUTH_ERROR"), 401); //$NON-NLS-1$
 						} catch(Exception ex) {
@@ -485,7 +601,7 @@ public class ChatServer {
 					String ip = Helper.ipv6Compress(ia.getHostAddress());
 					String domain = Helper.ipv6Compress(ia.getHostName());
 					Map<String, String> params = Helper.parsePostData(body);
-					String token = params.get("TOKEN"); //$NON-NLS-1$
+					String token = params.get("token"); //$NON-NLS-1$
 					WebsiteSession ws = this.webSessions.get(token);
 					if(ws != null && ws.getAccessToken().equals(token)) {
 						this.webSessions.remove(token);
@@ -495,7 +611,7 @@ public class ChatServer {
 						exchange.getResponseSender().send(new Gson().toJson(rslt));
 						exchange.endExchange();
 						fireStatsChanged(this);
-						Helper.logInfo(String.format(Messages.getString("ChatServer.WEBSITE_CLOSED_SESSION"), domain, ip), false); //$NON-NLS-1$
+						Helper.logInfo(String.format(Messages.getString("ChatServer.WEBSITE_LOGGED_OUT"), domain, ip), false); //$NON-NLS-1$
 					} else processError(exchange, Messages.getString("ChatServer.SESSION_NOT_FOUND"), 403); //$NON-NLS-1$
 				});
 			} else processError(exchange, Messages.getString("ChatServer.DISCONNECTION_ERROR"), 400); //$NON-NLS-1$
@@ -542,7 +658,7 @@ public class ChatServer {
 						exchange.getResponseSender().send(new Gson().toJson(rslt));
 						exchange.endExchange();
 						SwingUtilities.invokeLater(() -> fireActivityStateChanged(ses.getState()));
-						Helper.logInfo(String.format(Messages.getString("ChatServer.NEW_CHAT_STARTED"), usrId, ip), false); //$NON-NLS-1$
+						Helper.logInfo(String.format(Messages.getString("ChatServer.NEW_CHAT_STARTED"), ses.getBotName(), usrId), false); //$NON-NLS-1$
 						fireStatsChanged(this);
 					} else processError(exchange, Messages.getString("ChatServer.SESSION_NOT_FOUND"), 401); //$NON-NLS-1$
 				});
@@ -677,6 +793,8 @@ public class ChatServer {
 							exchange.endExchange();
 							fireActivityStateChanged(ses.getState()); // TODO : Check out this
 							fireStatsChanged(this); // TODO : Check out this
+							if(ses.isEnded())
+								Helper.logInfo(String.format(Messages.getString("ChatServer.LOG_SESSION_ENDED"), ses.getBotName(), ses.getUserId()));
 						} else processError(exchange, Messages.getString("ChatServer.USER_SESSION_NOT_FOUND"), 401); //$NON-NLS-1$
 					} else processError(exchange, Messages.getString("ChatServer.WEBSITE_SESSION_NOT_FOUND"), 401); //$NON-NLS-1$
 				});
@@ -725,6 +843,7 @@ public class ChatServer {
 			cs.groupId = rs.getInt("ai_group_id"); //$NON-NLS-1$
 			cs.description = rs.getString("description"); //$NON-NLS-1$
 			cs.enabled = rs.getInt("enabled") == 0 ? false : true; //$NON-NLS-1$
+			cs.aiContextSize = rs.getInt("ai_context_size"); //$NON-NLS-1$
 			ChatClient cc = cs.getChatClient();
 			cc.loadChatBotRIA(rs.getString("ria_file")); //$NON-NLS-1$
 			cs.loadChatModelClients(aiServers);
@@ -752,19 +871,20 @@ public class ChatServer {
 			} else modelPrefix = null;
 		}
 		if(modelPrefix != null) {
+			IChatModelClient cmc;
 			for(Object[] aiServer : aiServers) {
 				if(((int)aiServer[1] == dbId) && ((int)aiServer[4]==0)) { // Enabled and related to this chat server
-					IChatModelClient cmc = null;
+					cmc = null;
 					if(modelPrefix.equals(ChatGptModelClient.AIQ_PREFIX)) {
-						cmc = new ChatGptModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+						cmc = new ChatGptModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false), aiContextSize);
 					} else if(modelPrefix.equals(GroqModelClient.AIQ_PREFIX)) {
-						cmc = new GroqModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+						cmc = new GroqModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false), aiContextSize);
 					} else if(modelPrefix.equals(DeepSeekModelClient.AIQ_PREFIX)) {
-						cmc = new DeepSeekModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+						cmc = new DeepSeekModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false), aiContextSize);
 					} else if(modelPrefix.equals(Chat4AllModelClient.AIQ_PREFIX)) {
-						cmc = new Chat4AllModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+						cmc = new Chat4AllModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false), aiContextSize);
 					} else if(modelPrefix.equals(OllamaModelClient.AIQ_PREFIX)) {
-						cmc = new OllamaModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false));
+						cmc = new OllamaModelClient((int)aiServer[0], (String)aiServer[2], (Boolean)((Integer)aiServer[3]==1?true:false), aiContextSize);
 					}
 					if(cmc != null) {
 						chatClient.addChatModelClient(cmc);
@@ -837,11 +957,13 @@ public class ChatServer {
            if(isUser) {
         	   script += "function main() { return onUserMessage(response); }" + System.lineSeparator() + "main();"; //$NON-NLS-1$ //$NON-NLS-1$ //$NON-NLS-2$
            } else script += "function main() { return onAIMessage(response); }" + System.lineSeparator() + "main();"; //$NON-NLS-1$ //$NON-NLS-1$ //$NON-NLS-2$
+           String varName;
+           Object obj;
            Integer ret = v8Runtime.getExecutor(script).executeInteger();
            for(Map.Entry<String, String> entry : ses.getVarsSet()) {
-               String varName = entry.getKey();
+               varName = entry.getKey();
                if(global.hasOwnProperty(varName)) {
-                   Object obj = global.get(entry.getKey());
+                   obj = global.get(entry.getKey());
                    entry.setValue(obj.toString());
                }
            }
@@ -898,6 +1020,17 @@ public class ChatServer {
 	 */
 	public void setGroupId(int groupId) { if(groupId <= 0) throw new IllegalArgumentException(); this.groupId = groupId; }
 
+    /**
+     * @return AI context size.
+     */
+	public int getAiContextSize() { return this.aiContextSize; }
+
+    /**
+     * Set AI context size.
+     * @param value New AI context size.
+     */
+    public void setAiContextSize(int value) { if(aiContextSize <= 0) throw new IllegalArgumentException(); this.aiContextSize = value; }
+
 	/**
 	 * @return Server description.
 	 */
@@ -942,7 +1075,10 @@ public class ChatServer {
 	public Set<Integer> getConnectedClients() {
 		Set<Integer> cids = new HashSet<Integer>();
 		this.webSessions.forEach((id, ws) -> {
-			cids.add(ws.getWebsite().getId());
+			WebsiteRecord wr = ws.getWebsite();
+			if(wr != null) {
+				cids.add(wr.getId());
+			}// else Helper.logWarning("WebsiteSession with null WebsiteRecord! " + ws.toString(), false);
 		});
 		return cids;
 	}
@@ -964,29 +1100,33 @@ public class ChatServer {
 	 * Add a listener.
 	 * @param listener Listener to add.
 	 */
-	public void addChatServerListener(ChatServerListener listener)    { this.listeners.add(listener); }
+	public void addChatServerListener(ChatServerListener listener)    { synchronized(this.listeners) { this.listeners.add(listener); } }
 
 	/**
 	 * Remove a listener.
 	 * @param listener Listener to remove.
 	 */
-	public void removeChatServerListener(ChatServerListener listener) { this.listeners.remove(listener); }
+	public void removeChatServerListener(ChatServerListener listener) { synchronized(this.listeners) { this.listeners.remove(listener); } }
 
 	/**
 	 * Fire activity state changed event.
 	 * @param state New activity state.
 	 */
 	public void fireActivityStateChanged(ChatSessionState state)      {
-		for(ChatServerListener listener : this.listeners)
-			listener.onActivityStateChanged(this, state);
+		synchronized(this.listeners) {
+			for(ChatServerListener listener : this.listeners)
+				listener.onActivityStateChanged(this, state);
+		}
 	}
 
 	/**
 	 * Fire stats changed event.
 	 */
 	private void fireStatsChanged(ChatServer chatServer) {
-		for(ChatServerListener listener : this.listeners)
-			listener.onStatsChanged(chatServer);
+		synchronized(this.listeners) {
+			for(ChatServerListener listener : this.listeners)
+				listener.onStatsChanged(chatServer);
+		}
 	}
 
 	@Override
@@ -1074,6 +1214,11 @@ public class ChatServer {
 		 * @param lastAccess New last access time
 		 */
 		public void setLastAccess(long lastAccess) { this.lastAccess = lastAccess; }
+
+		@Override
+		public String toString() {
+    		return String.format("UserSession{sessionId=%d, userId=%s, started=%s, lastAccess=%s}", this.sessionId, this.userId, Helper.toDate(Instant.ofEpochMilli(this.started)), Helper.toDate(Instant.ofEpochMilli(this.lastAccess))); //$NON-NLS-1$
+		}
 	}
 
 	///////////////////////////////////////////////////////////////////////////
@@ -1094,14 +1239,14 @@ public class ChatServer {
 		 * @param wr Website record
 		 */
 		public WebsiteSession(WebsiteRecord wr) {
-			Objects.requireNonNull(wr);
+			//Objects.requireNonNull(wr);
 			this.sessionId = ++nextId;
 			this.websiteRecord = wr;
 			this.started = System.currentTimeMillis();
 			try {
 				this.accessToken = Helper.hashString(String.format("%d/%d", this.started, this.hashCode())).replace("+", "_").replace("=", "_"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
 			} catch (Exception ex) {
-				Helper.logWarning(ex, String.format(Messages.getString("ChatServer.TOKEN_CREATION_ERROR"), this.websiteRecord.getDomain()), false); //$NON-NLS-1$
+				Helper.logWarning(ex, String.format(Messages.getString("ChatServer.TOKEN_CREATION_ERROR"), this.websiteRecord), false); //$NON-NLS-1$
 				this.accessToken = String.format("%d-%d", this.started, this.hashCode()); //$NON-NLS-1$
 			}
 		}
@@ -1136,6 +1281,11 @@ public class ChatServer {
 		 * @return Website access token
 		 */
 		public String getAccessToken()                   { return this.accessToken;      }
+
+		@Override
+		public String toString() {
+    		return String.format("WebsiteSession{sessionId=%d, websiteRecord=%s, started=%s, lastAccess=%s}", this.sessionId, this.websiteRecord, Helper.toDate(Instant.ofEpochMilli(this.started)), Helper.toDate(Instant.ofEpochMilli(this.lastAccess))); //$NON-NLS-1$
+		}
 	}
 
 	///////////////////////////////////////////////////////////////////////////

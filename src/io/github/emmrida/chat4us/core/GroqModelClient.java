@@ -38,18 +38,32 @@ public class GroqModelClient implements IChatModelClient {
 	private boolean enabled;
 	private String aiServerUrl; // https://api.groq.com/openai/v1/chat/completions
 	private int dbId;
+	private int aiContextSize;
 
 	/**
-	 *
-	 * @param dbId
-	 * @param aiServerUrl
-	 * @param enabled
+	 * Init a chat model client object.
+	 * @param dbId Id of the the chat model data in the database.
+	 * @param aiServerUrl Url of the AI model server
+	 * @param enabled State of the instance.
 	 */
 	public GroqModelClient(int dbId, String aiServerUrl, boolean enabled) {
 		this.dbId = dbId;
 		this.aiServerUrl = aiServerUrl;
 		this.enabled = enabled;
 		this.busy = false;
+		this.aiContextSize = MainWindow.getSettings().getAiQueryMaxLength();
+	}
+
+	/**
+	 * Init a chat model client object.
+	 * @param dbId Id of the the chat model data in the database.
+	 * @param aiServerUrl Url of the AI model server
+	 * @param enabled State of the instance.
+	 * @param aiContextSize AI context size or max query length
+	 */
+	public GroqModelClient(int dbId, String aiServerUrl, boolean enabled, int aiContextSize) {
+    	this(dbId, aiServerUrl, enabled);
+    	this.aiContextSize = aiContextSize;
 	}
 
 	/**
@@ -62,7 +76,6 @@ public class GroqModelClient implements IChatModelClient {
 		String key;
 		String value;
 		int contentLength = msg.length();
-		int maxQueryLength = MainWindow.getSettings().getAiQueryMaxLength();
 		Map<String, Object> gson = new HashMap<>();
 		for(Map.Entry<String, String> entry : ses.getAiModelParamsEntrySet()) {
 			if(!entry.getKey().isBlank()) {
@@ -87,16 +100,17 @@ public class GroqModelClient implements IChatModelClient {
 		gLines.put("role", "user"); //$NON-NLS-1$ //$NON-NLS-2$
 		gLines.put("content", ses.getAiModelGuidelines()); //$NON-NLS-1$
 		contentLength += 8 + 7 + ses.getAiModelGuidelines().length();
+		String[] hline;
 		StringBuilder content = new StringBuilder();
 		for(int i = ses.getHistoryChatMessagesCount()-2; i >= Math.max(0, ses.getHistoryChatMessagesCount()-MainWindow.getSettings().getAiContextLines()-1); i--) {
 			data = new HashMap<>();
 			content.setLength(0);
-			String[] hline = ses.getHistoryChatMessage(i).split(" : ", 2); //$NON-NLS-1$
+			hline = ses.getHistoryChatMessage(i).split(" : ", 2); //$NON-NLS-1$
 			if(hline.length == 2) {
 				data.put("role", "User".equals(hline[0]) ? "user" : "system"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				hline[1] = hline[1].replaceAll("<[^>]+>", "").replaceAll("<br/>", " "); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 				contentLength += hline[1].length() + ("User".equals(hline[0]) ? 4 : 9); //$NON-NLS-1$
-				if(contentLength <= maxQueryLength) {
+				if(contentLength <= aiContextSize) {
 					content.append(hline[1]);
 					data.put("content", content.toString()); //$NON-NLS-1$
 					messages.add(data);
@@ -125,17 +139,17 @@ public class GroqModelClient implements IChatModelClient {
     private String sendMsgToModelServer(ChatSession ses, String msg) {
         if(httpClient == null)
         	httpClient = HttpClient.newHttpClient();
-        String jsonInputString = makeQuery(ses, msg);
-        HttpRequest request = HttpRequest.newBuilder()
+        try {
+	        String jsonInputString = makeQuery(ses, msg);
+	        HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(aiServerUrl))
                 .header("Authorization", "Bearer " + ses.getAiModelParam(AIQ_PREFIX+"api_key")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .header("Content-Type", "application/json") //$NON-NLS-1$ //$NON-NLS-2$
                 .POST(HttpRequest.BodyPublishers.ofString(jsonInputString, StandardCharsets.UTF_8))
                 .build();
-        try {
             HttpResponse<String> response = httpClient.send(request, BodyHandlers.ofString());
             return response.body();
-        } catch (IOException | InterruptedException ex) {
+        } catch (Exception ex) {
         	Helper.logError(ex, Messages.getString("GroqModelClient.RESPONSE_ERROR")); //$NON-NLS-1$
         	ses.setEnded(true);
             return Messages.getString("GroqModelClient.OFFLINE"); //$NON-NLS-1$
@@ -167,6 +181,7 @@ public class GroqModelClient implements IChatModelClient {
 		System.out.println(response);
 		response = (String)Helper.getValueFromJsonPath(response, "choices/0/message/content"); //$NON-NLS-1$
 		if(response == null) {
+			Helper.logError(Messages.getString("GroqModelClient.RESPONSE_ERROR")); //$NON-NLS-1$
 			response = ses.getDefaultErrorMessage();
 			ses.setEnded(true);
 		}

@@ -236,14 +236,14 @@ public class ChatBotClient {
             } else botMessages =  processError(ses, data, response);
         } else if("date:dd/MM/yyyy".equals(data.getValType())) { //$NON-NLS-1$
         	try {
-        		Helper.toLocalDateTime(response, "dd/MM/yyyy"); //$NON-NLS-1$
+        		Helper.toLocalDate(response, "dd/MM/yyyy"); //$NON-NLS-1$
                 botMessages =  processSuccess(ses, data, response);
             } catch(DateTimeParseException ex) {
                 botMessages =  processError(ses, data, response);
         	}
         } else if("date:MM/dd/yyyy".equals(data.getValType())) { //$NON-NLS-1$
         	try {
-        		Helper.toLocalDateTime(response, "MM/dd/yyyy"); //$NON-NLS-1$
+        		Helper.toLocalDate(response, "MM/dd/yyyy"); //$NON-NLS-1$
                 botMessages =  processSuccess(ses, data, response);
             } catch(DateTimeParseException ex) {
                 botMessages =  processError(ses, data, response);
@@ -321,11 +321,13 @@ public class ChatBotClient {
            global.set("response", response); //$NON-NLS-1$
            for(Map.Entry<String, String> entry : ses.getVarsSet())
                global.set(entry.getKey(), entry.getValue());
+           String varName;
+           Object obj;
            Integer ret = v8Runtime.getExecutor(script).executeInteger();
            for(Map.Entry<String, String> entry : ses.getVarsSet()) {
-               String varName = entry.getKey();
+               varName = entry.getKey();
                if(global.hasOwnProperty(varName)) {
-                   Object obj = global.get(entry.getKey());
+                   obj = global.get(entry.getKey());
                    entry.setValue(obj.toString());
                    global.delete(entry.getKey());
                }
@@ -429,12 +431,14 @@ public class ChatBotClient {
      * @return Map object.
      */
     public static Map<String, Integer> extractMatchingList(String list) {
+    	String key;
+    	int value;
         Map<String, Integer> map = new LinkedHashMap<>();
         Pattern pattern = Pattern.compile("\\['(.*?)'\\s*,\\s*([-|\\d]+)\\]"); //$NON-NLS-1$
         Matcher matcher = pattern.matcher(list);
         while (matcher.find()) {
-            String key = matcher.group(1); // Extract the key
-            int value = Integer.parseInt(matcher.group(2)); // Extract and convert value to Integer
+            key = matcher.group(1); // Extract the key
+            value = Integer.parseInt(matcher.group(2)); // Extract and convert value to Integer
             map.put(key, value);
         }
 		return map;
@@ -446,12 +450,14 @@ public class ChatBotClient {
     * @return Map object
     */
    public static Map<String, String> extractMatchingValues(String list) {
+	   String key;
+       String value;
        Map<String, String> map = new LinkedHashMap<>();
        Pattern pattern = Pattern.compile("\\['(.*?)'\\s*,\\s*'(.*?)'\\]"); //$NON-NLS-1$
        Matcher matcher = pattern.matcher(list);
        while (matcher.find()) {
-           String key = matcher.group(1); // Extract the key
-           String value = matcher.group(2); // Extract value
+           key = matcher.group(1); // Extract the key
+           value = matcher.group(2); // Extract value
            map.put(key, value);
        }
 		return map;
@@ -463,8 +469,10 @@ public class ChatBotClient {
      * @return List of bot messages.
      */
     private String[] postProcessChatBotMessages(ChatSession ses, String[] botMessages) {
+        Objects.requireNonNull(botMessages);
+        String msg;
         for(int i = 0; i < botMessages.length; i++) {
-            String msg = botMessages[i].replaceAll("\n", ""); //$NON-NLS-1$ //$NON-NLS-2$
+            msg = botMessages[i].replaceAll("\n", ""); //$NON-NLS-1$ //$NON-NLS-2$
             if(!msg.isEmpty()) {
                 botMessages[i] = replacePlaceholders(ses, msg);
                 ses.addHistoryChatMessage(true, botMessages[i].trim());
@@ -486,10 +494,12 @@ public class ChatBotClient {
         Pattern pattern = Pattern.compile("\\{:(.*?):\\}"); //$NON-NLS-1$
         Matcher matcher = pattern.matcher(msg);
 
+        String key;
+        String replacement;
         StringBuffer result = new StringBuffer();
         while (matcher.find()) {
-            String key = matcher.group(1); // Extract the key inside {:...:}
-            String replacement = ses.getVar(key, ""); // Get the replacement or empty string //$NON-NLS-1$
+            key = matcher.group(1); // Extract the key inside {:...:}
+            replacement = ses.getVar(key, ""); // Get the replacement or empty string //$NON-NLS-1$
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(result); // Append the remaining part of the template
@@ -828,26 +838,31 @@ public class ChatBotClient {
         riaSes.setBotScript(Helper.unescapeHtml(Helper.getNodeValue(nodes, "script"))); //$NON-NLS-1$
         this.riaChatSessions.put(loc, riaSes);
         nodes = document.getElementsByTagName("params").item(0).getChildNodes(); //$NON-NLS-1$
+        Node node;
+        Node item;
+        String param;
+        String value;
         for(int i = 0; i < nodes.getLength(); i++) {
-            Node node = nodes.item(i);
+            node = nodes.item(i);
             if(node.getNodeType() == Node.ELEMENT_NODE) {
-        		Node item = Helper.getNodeByName(node.getChildNodes(), "key").getChildNodes().item(0); //$NON-NLS-1$
-	        	String param = ""; //$NON-NLS-1$
+        		item = Helper.getNodeByName(node.getChildNodes(), "key").getChildNodes().item(0); //$NON-NLS-1$
+	        	param = ""; //$NON-NLS-1$
 	        	if(item != null)
 	        		param = item.getNodeValue();
 	        	item = Helper.getNodeByName(node.getChildNodes(), "value").getChildNodes().item(0); //$NON-NLS-1$
-	        	String value = ""; //$NON-NLS-1$
+	        	value = ""; //$NON-NLS-1$
 	        	if(item != null)
 	        		value = item.getNodeValue();
 	        	riaSes.addAiModelParam(param, value);
             }
         }
 
+        NodePanel.Data data;
         Map<Integer, NodePanel.Data> nodesMap = new HashMap<>();
         nodes = document.getElementsByTagName("question"); //$NON-NLS-1$
         for(int i = 0; i < nodes.getLength(); i++) {
-            Node node = nodes.item(i);
-            NodePanel.Data data = NodePanel.Data.fromXml(node);
+            node = nodes.item(i);
+            data = NodePanel.Data.fromXml(node);
             nodesMap.put(data.getId(), data);
         }
         this.riaNodes.put(loc, nodesMap);
